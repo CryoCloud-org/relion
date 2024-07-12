@@ -18,6 +18,7 @@
  * author citations must be preserved.
  ***************************************************************************/
 #include "src/gui_jobwindow.h"
+#include "src/gui_entries.h"
 JobWindow::JobWindow(int _x, int _y, int _w, int _h, const char* title ) : Fl_Box(_x,_y,_w,_h,title)
 {
 	clear();
@@ -788,10 +789,35 @@ void JobWindow::initialiseAutopickWindow()
 	tab3->label("Topaz");
 	resetHeight();
 
+    place("fn_topaz_exe", TOGGLE_DEACTIVATE);
 	place("topaz_particle_diameter", TOGGLE_DEACTIVATE);
 
-	// Add a little spacer
-	current_y += STEPY/2;
+    // Add a little spacer
+    current_y += STEPY/4;
+
+    group5 = new Fl_Group(WCOL0,  MENUHEIGHT, 550, 600-MENUHEIGHT, "");
+    group5->end();
+    place("do_topaz_train", TOGGLE_DEACTIVATE, group5);
+    group5->begin();
+
+    place("topaz_nr_particles", TOGGLE_DEACTIVATE);
+    place("topaz_train_picks", TOGGLE_DEACTIVATE);
+
+    group6 = new Fl_Group(WCOL0,  MENUHEIGHT, 550, 600-MENUHEIGHT, "");
+    group6->end();
+
+    place("do_topaz_train_parts", TOGGLE_DEACTIVATE, group6);
+
+    group6->begin();
+    place("topaz_train_parts", TOGGLE_DEACTIVATE);
+    group6->end();
+    guientries["do_topaz_train_parts"].cb_menu_i();
+
+    group5->end();
+    guientries["do_topaz_train"].cb_menu_i();
+
+    // Add a little spacer
+    current_y += STEPY/4;
 
 	group7 = new Fl_Group(WCOL0,  MENUHEIGHT, 550, 600-MENUHEIGHT, "");
 	group7->end();
@@ -801,38 +827,24 @@ void JobWindow::initialiseAutopickWindow()
 
 	group7->begin();
 	place("topaz_model", TOGGLE_DEACTIVATE);
-	group7->end();
-	guientries["do_topaz_pick"].cb_menu_i();
 
-	// Add a little spacer
-	current_y += STEPY/2;
+    group8 = new Fl_Group(WCOL0,  MENUHEIGHT, 550, 600-MENUHEIGHT, "");
+    group8->end();
 
-	group5 = new Fl_Group(WCOL0,  MENUHEIGHT, 550, 600-MENUHEIGHT, "");
-	group5->end();
-	place("do_topaz_train", TOGGLE_DEACTIVATE, group5);
-	group5->begin();
+    place("do_topaz_filaments", TOGGLE_DEACTIVATE, group8);
 
-	place("topaz_nr_particles", TOGGLE_DEACTIVATE);
-	place("topaz_train_picks", TOGGLE_DEACTIVATE);
+    group8->begin();
+    place2("topaz_filament_threshold", "topaz_hough_length", "Threshold, Hough length (A)", TOGGLE_DEACTIVATE);
+    group8->end();
+    guientries["do_topaz_filaments"].cb_menu_i();
 
-	group6 = new Fl_Group(WCOL0,  MENUHEIGHT, 550, 600-MENUHEIGHT, "");
-	group6->end();
+    group7->end();
+    guientries["do_topaz_pick"].cb_menu_i();
 
-	place("do_topaz_train_parts", TOGGLE_DEACTIVATE, group6);
+    // Add a little spacer
+    current_y += STEPY/4;
 
-	group6->begin();
-	place("topaz_train_parts", TOGGLE_DEACTIVATE);
-	group6->end();
-	guientries["do_topaz_train_parts"].cb_menu_i();
-
-	group5->end();
-	guientries["do_topaz_train"].cb_menu_i();
-
-	// Add a little spacer
-	current_y += STEPY/2;
-
-	place("fn_topaz_exe", TOGGLE_DEACTIVATE);
-	place("topaz_other_args", TOGGLE_DEACTIVATE);
+    place("topaz_other_args", TOGGLE_DEACTIVATE);
 
 	tab3->end();
 	tab4->begin();
@@ -2534,7 +2546,7 @@ void JobWindow::placeTomoInput(bool has_tomograms, bool has_particles,
 
 void JobWindow::initialiseTomoImportWindow()
 {
-	setupTabs(2);
+	setupTabs(3);
 
     tab1->begin();
 	tab1->label("General");
@@ -2569,6 +2581,33 @@ void JobWindow::initialiseTomoImportWindow()
     place("flip_tiltseries_hand", TOGGLE_DEACTIVATE);
 
 	tab2->end();
+
+    tab3->begin();
+    tab3->label("Coordinates");
+    resetHeight();
+
+    group1 = new Fl_Group(WCOL0,  MENUHEIGHT, 550, 600-MENUHEIGHT, "");
+    group1->end();
+
+    place("do_coords", TOGGLE_DEACTIVATE, group1, false);
+
+    group1->begin();
+    place("in_coords", TOGGLE_DEACTIVATE);
+    place("remove_substring", TOGGLE_DEACTIVATE);
+    place("remove_substring2", TOGGLE_DEACTIVATE);
+
+    // Add a little spacer
+    current_y += STEPY/2;
+
+    place("is_center", TOGGLE_DEACTIVATE, group2, false);
+    place("scale_factor", TOGGLE_DEACTIVATE);
+    place("add_factor", TOGGLE_DEACTIVATE);
+
+    group1->end();
+    guientries["do_coords"].cb_menu_i(); // make default active
+
+    tab3->end();
+
 }
 
 void JobWindow::initialiseTomoAlignTiltseriesWindow()
@@ -2644,7 +2683,26 @@ void JobWindow::initialiseTomoReconstructTomogramsWindow()
     
     place("in_tiltseries", TOGGLE_DEACTIVATE);
 
-	tab2->begin();
+    current_y += STEPY /2 ;
+
+    place("generate_split_tomograms", TOGGLE_DEACTIVATE);
+
+    current_y += STEPY /2 ;
+
+    group1 = new Fl_Group(WCOL0,  MENUHEIGHT, 550, 600-MENUHEIGHT, "");
+    group1->end();
+    place("do_proj", TOGGLE_DEACTIVATE, group1, false);
+
+    group1->begin();
+    place("centre_proj", TOGGLE_DEACTIVATE);
+    place("thickness_proj", TOGGLE_DEACTIVATE);
+    group1->end();
+    guientries["do_proj"].cb_menu_i();
+
+    tab1-> end();
+
+
+    tab2->begin();
 	tab2->label("Reconstruct");
 	resetHeight();
 
@@ -2654,16 +2712,24 @@ void JobWindow::initialiseTomoReconstructTomogramsWindow()
     place("zdim", TOGGLE_DEACTIVATE);
     place("binned_angpix", TOGGLE_DEACTIVATE);
     
-    current_y += STEPY /2 ;
-
-    place("generate_split_tomograms", TOGGLE_DEACTIVATE);
 
     current_y += STEPY /2 ;
 
     place ("tiltangle_offset");
-    place("tomo_name");
+    place("tomo_name", TOGGLE_REACTIVATE);
 
-	tab2->end();
+    current_y += STEPY /2 ;
+
+    group2 = new Fl_Group(WCOL0,  MENUHEIGHT, 550, 600-MENUHEIGHT, "");
+    group2->end();
+    place("do_fourier", TOGGLE_DEACTIVATE, group2, false);
+
+    group2->begin();
+    place("ctf_intact_first_peak", TOGGLE_DEACTIVATE);
+    group2->end();
+    guientries["do_fourier"].cb_menu_i();
+
+    tab2->end();
 
 }
 
@@ -2942,7 +3008,7 @@ void JobWindow::initialiseTomoAlignWindow()
 
 void JobWindow::initialiseTomoReconParWindow()
 {
-	setupTabs(2);
+	setupTabs(3);
 
 	tab1->begin();
 	tab1->label("I/O");
@@ -2969,6 +3035,31 @@ void JobWindow::initialiseTomoReconParWindow()
 	place("sym_name", TOGGLE_DEACTIVATE);
 
 	tab2->end();
+
+    tab3->begin();
+	tab3->label("Helix");
+	resetHeight();
+
+    group1 = new Fl_Group(WCOL0,  MENUHEIGHT, 550, 600-MENUHEIGHT, "");
+    group1->end();
+    place("do_helix", TOGGLE_DEACTIVATE, group1);
+
+    current_y += STEPY /2 ;
+
+    group1->begin();
+
+    place("helical_nr_asu");
+    place("helical_twist");
+    place("helical_rise");
+    place("helical_tube_outer_diameter");
+    place("helical_z_percentage");
+
+    group1->end();
+    guientries["do_helix"].cb_menu_i();
+
+    tab3->end();
+
+
 }
 
 void JobWindow::initialiseTomoExcludeTiltImagesWindow()

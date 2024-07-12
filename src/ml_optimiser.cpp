@@ -2024,9 +2024,32 @@ void MlOptimiser::initialiseGeneral(int rank)
     if (!exists(fn_dir))
         REPORT_ERROR("ERROR: output directory does not exist!");
 
-    // Just die if trying to use accelerators and skipping alignments
-    if ((do_skip_align || do_skip_rotate) && (do_gpu || do_sycl || do_cpu))
-        REPORT_ERROR("ERROR: you cannot use accelerators when skipping alignments.");
+    char *env_blush_args = getenv("RELION_BLUSH_ARGS");
+    if (env_blush_args != nullptr)
+        blush_args += std::string(env_blush_args);
+
+    if (skip_spectral_trailing)
+        blush_args += " --skip-spectral-trailing ";
+
+    if (do_gpu)
+    {
+        blush_args += " --gpu ";
+        for (auto &d : gpuDevices)
+            blush_args += gpu_ids + ",";
+        blush_args += " ";
+    }
+    else
+        blush_args = blush_args + " --gpu -1 ";
+
+    if (do_skip_align || do_skip_rotate)
+    {
+        do_gpu = false;
+        do_sycl = false;
+        do_cpu = false;
+
+        std::cerr << "WARNING: you cannot use accelerators (like the GPU) when skipping alignments." << std::endl
+                  << "Will continue without accelerators and maintain setting for external tasks (like Blush regularization)." << std::endl;
+    }
 
     if (do_always_cc)
         do_calculate_initial_sigma_noise = false;
@@ -2531,23 +2554,6 @@ void MlOptimiser::initialiseGeneral(int rank)
         subset_size = -1;
         mu = 0.;
     }
-
-	char *env_blush_args = getenv("RELION_BLUSH_ARGS");
-	if (env_blush_args != nullptr)
-		blush_args += std::string(env_blush_args);
-
-    if (skip_spectral_trailing)
-        blush_args += " --skip-spectral-trailing ";
-
-	if (do_gpu)
-	{
-		blush_args += " --gpu ";
-		for (auto &d: gpuDevices)
-			blush_args += gpu_ids + ",";
-		blush_args += " ";
-	}
-	else
-		blush_args = blush_args + " --gpu -1 ";
 
     if (minimum_nr_particles_sigma2_noise < 0)
     {
@@ -6030,7 +6036,7 @@ void MlOptimiser::getFourierTransformsAndCtfs(
                 std::cerr << "  old_offset_helix(p1, p2, z) = (" << XX(my_old_offset_helix_coords) << ", " << YY(my_old_offset_helix_coords) << "," << ZZ(my_old_offset_helix_coords) << ")" << std::endl;
             }
 #endif
-        // We do NOT want to accumulate the offsets in the direction along the helix (which is X in the 2D helical coordinate system, and Z in 3D!)
+        // We do NOT want to accumulate the offsets in the direction along the helix (which is X in the 2D and 3D helical coordinate system)
         // However, when doing helical local searches, we accumulate offsets
         if ( (!do_skip_align) && (!do_skip_rotate) )
         {
@@ -6041,10 +6047,7 @@ void MlOptimiser::getFourierTransformsAndCtfs(
             bool do_local_angular_searches = (do_auto_refine_local_searches) || (do_classification_local_searches);
             if (!do_local_angular_searches)
             {
-                if (mymodel.data_dim == 2)
-                    XX(my_old_offset_helix_coords) = 0.;
-                else if (mymodel.data_dim == 3 || mydata.is_tomo)
-                    ZZ(my_old_offset_helix_coords) = 0.;
+                XX(my_old_offset_helix_coords) = 0.;
             }
         }
 #ifdef DEBUG_HELICAL_ORIENTATIONAL_SEARCH
@@ -6950,6 +6953,16 @@ void MlOptimiser::precalculateShiftedImagesCtfsAndInvSigma2s(bool do_also_unmask
                     if (mymodel.data_dim == 3 || mydata.is_tomo)
                         zshift = oversampled_translations_z[iover_trans];
 
+                    // For subtomo: convert 3D shifts in the tomogram to 2D shifts in the tilt series images
+                    if (mydata.is_tomo)
+                    {
+                        // exp_old_offset has not been applied (as it is selfRounded() for 2D images...), so do this now
+                        // For helices: op.old_offset is in HELICAL COORDS, not CART_COORDS!
+                        xshift += XX(exp_old_offset);
+                        yshift += YY(exp_old_offset);
+                        zshift += ZZ(exp_old_offset);
+                    }
+
                     if ( (do_helical_refine) && (!ignore_helical_symmetry) )
                     {
                         RFLOAT rot_deg = DIRECT_A2D_ELEM(exp_metadata, metadata_offset, METADATA_ROT);
@@ -6967,10 +6980,6 @@ void MlOptimiser::precalculateShiftedImagesCtfsAndInvSigma2s(bool do_also_unmask
                     // For subtomo: convert 3D shifts in the tomogram to 2D shifts in the tilt series images
                     if (mydata.is_tomo)
                     {
-                        // exp_old_offset has not been applied (as it is selfRounded() for 2D images...), so do this now
-                        xshift += XX(exp_old_offset);
-                        yshift += YY(exp_old_offset);
-                        zshift += ZZ(exp_old_offset);
                         mydata.getTranslationInTiltSeries(part_id, img_id, xshift, yshift, zshift, xshift, yshift, zshift);
                     }
 
@@ -7333,6 +7342,16 @@ void MlOptimiser::getAllSquaredDifferences(long int part_id, int ibody,
                                                 if (mymodel.data_dim == 3 || mydata.is_tomo)
                                                     zshift = (exp_current_oversampling == 0) ? (oversampled_translations_z[0]) : (oversampled_translations_z[iover_trans]);
 
+                                                // For subtomo: convert 3D shifts in the tomogram to 2D shifts in the tilt series images
+                                                if (mydata.is_tomo)
+                                                {
+                                                    // exp_old_offset was not yet applied for subtomos!
+                                                    // For helices: op.old_offset is in HELICAL COORDS, not CART_COORDS!
+                                                    xshift += XX(exp_old_offset);
+                                                    yshift += YY(exp_old_offset);
+                                                    zshift += ZZ(exp_old_offset);
+                                                }
+
                                                 if ((do_helical_refine) && (!ignore_helical_symmetry))
                                                 {
                                                     RFLOAT rot_deg = DIRECT_A2D_ELEM(exp_metadata, metadata_offset, METADATA_ROT);
@@ -7349,10 +7368,6 @@ void MlOptimiser::getAllSquaredDifferences(long int part_id, int ibody,
                                                 // For subtomo: convert 3D shifts in the tomogram to 2D shifts in the tilt series images
                                                 if (mydata.is_tomo)
                                                 {
-                                                    // exp_old_offset was not yet applied for subtomos!
-                                                    xshift += XX(exp_old_offset);
-                                                    yshift += YY(exp_old_offset);
-                                                    zshift += ZZ(exp_old_offset);
                                                     mydata.getTranslationInTiltSeries(part_id, img_id,
                                                                                       xshift, yshift, zshift,
                                                                                       xshift, yshift, zshift);
@@ -8532,6 +8547,16 @@ void MlOptimiser::storeWeightedSums(long int part_id, int ibody,
                                                 if (mymodel.data_dim == 3 || mydata.is_tomo)
                                                     zshift = oversampled_translations_z[iover_trans];
 
+                                                // For subtomo: convert 3D shifts in the tomogram to 2D shifts in the tilt series images
+                                                if (mydata.is_tomo)
+                                                {
+                                                    // exp_old_offset was not yet applied for subtomos!
+                                                    // For helices: op.old_offset is in HELICAL COORDS, not CART_COORDS!
+                                                    xshift += XX(exp_old_offset);
+                                                    yshift += YY(exp_old_offset);
+                                                    zshift += ZZ(exp_old_offset);
+                                                }
+
                                                 // Feb01,2017 - Shaoda, on-the-fly shifts in helical reconstuctions (2D and 3D)
                                                 if ( (do_helical_refine) && (!ignore_helical_symmetry) )
                                                 {
@@ -8550,10 +8575,6 @@ void MlOptimiser::storeWeightedSums(long int part_id, int ibody,
                                                 // For subtomo: convert 3D shifts in the tomogram to 2D shifts in the tilt series images
                                                 if (mydata.is_tomo)
                                                 {
-                                                    // exp_old_offset was not yet applied for subtomos!
-                                                    xshift += XX(exp_old_offset);
-                                                    yshift += YY(exp_old_offset);
-                                                    zshift += ZZ(exp_old_offset);
                                                     mydata.getTranslationInTiltSeries(part_id, img_id,
                                                                                       xshift, yshift, zshift,
                                                                                       xshift, yshift, zshift);
@@ -9048,11 +9069,14 @@ void MlOptimiser::storeWeightedSums(long int part_id, int ibody,
         if (mydata.obsModel.getCtfPremultiplied(optics_group))
         {
             RFLOAT myscale = XMIPP_MAX(0.001, mymodel.scale_correction[igroup]);
-            FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Mresol_fine[optics_group])
+            for (int img_id =0; img_id < exp_nr_images; img_id++)
             {
-                int ires = DIRECT_MULTIDIM_ELEM(Mresol_fine[optics_group], n);
-                if (ires > -1)
-                    DIRECT_MULTIDIM_ELEM(thr_wsum_ctf2, ires) += myscale * DIRECT_MULTIDIM_ELEM(exp_local_Fctf[0], n);
+                FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Mresol_fine[optics_group])
+                {
+                    int ires = DIRECT_MULTIDIM_ELEM(Mresol_fine[optics_group], n);
+                    if (ires > -1)
+                        DIRECT_MULTIDIM_ELEM(thr_wsum_ctf2, ires) += myscale * DIRECT_MULTIDIM_ELEM(exp_local_Fctf[img_id], n);
+                }
             }
         }
 

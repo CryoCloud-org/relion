@@ -1799,6 +1799,11 @@ bool RelionJob::getCommandsCtffindJob(std::string &outputname, std::vector<std::
         // tomo-specific options
         command += " --localsearch_nominal_defocus " + joboptions["localsearch_nominal_defocus"].getString();
         command += " --exp_factor_dose " +  joboptions["exp_factor_dose"].getString();
+
+        // Tomo-specific output file for display button
+        Node node4(outputname + "power_spectra_fits.star", LABEL_CTFFIND_POWER_SPECTRA);
+        outputNodes.push_back(node4);
+
     }
 	else
 	{
@@ -1986,10 +1991,13 @@ void RelionJob::initialiseAutopickJob()
 	joboptions["do_topaz_train_parts"] = JobOption("OR train on a set of particles? ", false, "If set to Yes, the input Coordinates above will be ignored. Instead, one uses a _data.star file from a previous 2D or 3D refinement or selection to use those particle positions for training.");
 	joboptions["topaz_train_parts"] = JobOption("Particles STAR file for training: ", LABEL_PARTS_CPIPE, 1, "", "Input STAR file (*.{star})", "Filename of the STAR file with the particle coordinates to be used for training, e.g. from a previous 2D or 3D classification or selection.");
 	joboptions["do_topaz_pick"] = JobOption("Perform topaz picking?", false, "Set this option to Yes if you want to use a topaz model for autopicking.");
-	joboptions["topaz_particle_diameter"] = JobOption("Particle diameter (A) ", -1, 0, 2000, 20, "Diameter of the particle (to be used to infer topaz downscale factor and particle radius)");
+    joboptions["topaz_particle_diameter"] = JobOption("Particle diameter (A) ", -1, 0, 2000, 20, "Diameter of the particle (to be used to infer topaz downscale factor and particle radius)");
 	joboptions["topaz_nr_particles"] = JobOption("Nr of particles per micrograph: ", -1, 0, 2000, 20, "Expected average number of particles per micrograph");
 	joboptions["topaz_model"] = JobOption("Trained topaz model: ", "", "SAV Files (*.sav)", ".", "Trained topaz model for topaz-based picking. Use on job for training and a next job for picking. Leave this empty to use the default (general) model.");
 	joboptions["fn_topaz_exe"]= JobOption("Topaz executable:", std::string("relion_python_topaz"), "Executable for running topaz. The default relion_python_topaz gets installed automatically through conda in a typical relion install. Only change this if this executable gives you problems.");
+    joboptions["do_topaz_filaments"] = JobOption("Pick filaments?", false, "If set to Yes, this option will activate the -f option in our modified version of topaz that can pick filaments, as described in Lovestam & Scheres, Faraday Discussions 2022");
+    joboptions["topaz_filament_threshold"] = JobOption("Threshold:", std::string("-5"),  "This sets the filament picking threshold and the length of the Hough transform, as described in Lovestam & Scheres, Faraday Discussions 2022. Useful values in our work on recombinant tau for the threshold range from −4 to −7. We typically do not change the default length of the Hough transform, which is set to be equal to the particle diameter when a negative value is given here. You can provide the additional option -fp to display images of intermediate steps of the algorithm to tune difficult cases.");
+    joboptions["topaz_hough_length"] = JobOption("Hough length (A):", std::string("-1"), "This sets the filament picking threshold and the length of the Hough transform, as described in Lovestam & Scheres, Faraday Discussions 2022. Useful values in our work on recombinant tau for the threshold range from −4 to −7. We typically do not change the default length of the Hough transform, which is set to be equal to the particle diameter when a negative value is given here. You can provide the additional option -fp to display images of intermediate steps of the algorithm to tune difficult cases.");
 	joboptions["topaz_other_args"]= JobOption("Additional topaz arguments:", std::string(""), "These additional arguments will be passed onto all topaz programs.");
 
 	joboptions["do_refs"] = JobOption("Use reference-based template-matching?", false, "If set to Yes, 2D or 3D references, as defined on the References tab will be used for autopicking.");
@@ -2026,7 +2034,7 @@ The samplings are approximate numbers and vary slightly over the sphere.\n\n For
 	joboptions["use_gpu"] = JobOption("Use GPU acceleration?", false, "If set to Yes, the job will try to use GPU acceleration. The Laplacian-of-Gaussian picker does not support GPU.");
 	joboptions["gpu_ids"] = JobOption("Which GPUs to use:", std::string(""), "This argument is not necessary. If left empty, the job itself will try to allocate available GPU resources. You can override the default allocation by providing a list of which GPUs (0,1,2,3, etc) to use. MPI-processes are separated by ':'. For example: 0:1:0:1:0:1");
 
-	joboptions["do_pick_helical_segments"] = JobOption("Pick 2D helical segments?", false, "Set to Yes if you want to pick 2D helical segments.");
+	joboptions["do_pick_helical_segments"] = JobOption("Pick 2D helical segments?", false, "Set to Yes if you want to pick 2D helical segments. Note this will run the old algorithms for reference-based helical segment picking, as described by He & Scheres, J Struct Biol, 2017. Often, we now run filament picking from the Topaz tab instead....");
 	joboptions["do_amyloid"] = JobOption("Pick amyloid segments?", false, "Set to Yes if you want to use the algorithm that was developed specifically for picking amyloids.");
 
 	joboptions["helical_tube_outer_diameter"] = JobOption("Tube diameter (A): ", 200, 100, 1000, 10, "Outer diameter (in Angstroms) of helical tubes. \
@@ -2238,6 +2246,17 @@ bool RelionJob::getCommandsAutopickJob(std::string &outputname, std::vector<std:
 				command += " --topaz_extract";
 				if (joboptions["topaz_model"].getString() != "")
 					command += " --topaz_model " + joboptions["topaz_model"].getString();
+
+				if (joboptions["do_topaz_filaments"].getBoolean())
+                {
+					command += " --helix ";
+                    command += " --topaz_threshold " + joboptions["topaz_filament_threshold"].getString();
+                    if (joboptions["topaz_hough_length"].getNumber(error_message) > 0.)
+                    {
+                        command += " --helical_tube_length_min " + joboptions["topaz_hough_length"].getString();
+                    }
+                }
+
 			}
 
 			if ((joboptions["topaz_other_args"].getString()).length() > 0)
@@ -2655,7 +2674,7 @@ void RelionJob::initialiseSelectJob()
 	joboptions["select_nr_parts"] = JobOption("Select at least this many particles: ", -1, -1, 10000, 500, "Even if they have scores below the minimum threshold, select at least this many particles with the best scores.");
 	joboptions["select_nr_classes"] = JobOption("OR: select at least this many classes: ", -1, -1, 24, 1, "Even if they have scores below the minimum threshold, select at least this many classes with the best scores.");
 
-	joboptions["do_recenter"] = JobOption("Re-center the class averages?", true, "This option is only used when selecting particles from 2D classes. The selected class averages will all re-centered on their center-of-mass. This is useful when you plane to use these class averages as templates for auto-picking.");
+	joboptions["do_recenter"] = JobOption("Re-center the class averages?", false, "This option is only used when selecting particles from 2D classes. The selected class averages will all re-centered on their center-of-mass. This is useful when you plane to use these class averages as templates for auto-picking.");
 	joboptions["do_regroup"] = JobOption("Regroup the particles?", false, "If set to Yes, then the program will regroup the selected particles in 'more-or-less' the number of groups indicated below. For re-grouping from individual particle _data.star files, a _model.star file with the same prefix should exist, i.e. the particle star file should be generated by relion_refine");
 	joboptions["nr_groups"] = JobOption("Approximate nr of groups: ", 1, 50, 20, 1, "It is normal that the actual number of groups may deviate a little from this number. ");
 
@@ -6418,7 +6437,7 @@ void RelionJob::initialiseTomoImportJob()
 	joboptions["Cs"] = JobOption("Spherical aberration (mm):", 2.7, 0.01, 4, 0.1 , "Spherical aberration of the microscope used to collect these images (in mm). Typical values are 2.7 (FEI Titan & Talos, most JEOL CRYO-ARM), 2.0 (FEI Polara), 1.4 (some JEOL CRYO-ARM) and 0.01 (microscopes with a Cs corrector).");
 	joboptions["Q0"] = JobOption("Amplitude contrast:", 0.1, 0.05, 1, 0.01, "Fraction of amplitude contrast (default=0.1). Often values around 10% work better than theoretically more accurate lower values. ");
 	joboptions["dose_rate"] = JobOption("Dose rate per tilt-image:", 3, 0, 20, 1, "Electron dose (in e/A^2) per image in the tilt series. If the option below is set to true, then you can provide the dose rate per movie frame here.");
-	joboptions["dose_is_per_movie_frame"] = JobOption("Is dose rate per movie frame?", false, "If set to true, the dose tate above is taken per movie frame, otherwise the dose rate is assumed to be per tilt image.");
+	joboptions["dose_is_per_movie_frame"] = JobOption("Is dose rate per movie frame?", false, "If set to true, the dose rate above is taken per movie frame, otherwise the dose rate is assumed to be per tilt image.");
 
 	joboptions["movie_files"] = JobOption("Tilt image files:", (std::string)"frames/*.mrc","File pattern matching all tilt image files. These can be multi-frame micrographs or single 2D images.");
 	joboptions["mdoc_files"] = JobOption("mdoc files:", (std::string)"mdoc/*.mdoc","File pattern pointing to the mdoc files.");
@@ -6430,6 +6449,17 @@ void RelionJob::initialiseTomoImportJob()
 	joboptions["flip_tiltseries_hand"] = JobOption("Invert defocus handedness?", true, "Specify Yes to flip the handedness of the defocus geometry (default = Yes (value -1 in the STAR file), the same as the tutorial dataset: EMPIAR-10164)");
 	joboptions["images_are_motion_corrected"] = JobOption("Movies already motion corrected?", false, "Select Yes if your input images in 'Tilt image movie files' have already been motion corrected and/or are summed single frame images. Make sure the image file names match the corresponding image file names under SubFramePath in the mdoc files");
 
+    joboptions["do_coords"] = JobOption("Or Import coordinates instead?", false, "Set this to Yes for importing particle coordinates.");
+    joboptions["in_coords"] = JobOption("Input coordinates: ", "", "Input file (*.star)", ".", "You can provide a 2-column STAR file (with columns rlnTomoName and  rlnTomoImportParticleFile for the tomogram names and their corrsesponding particle coordinate files, OR you can provide a linux wildcard to all the particle coordinate files. \n \n \
+ The coordinate files can be in RELION STAR format, or in ASCII text files. Input STAR file should contain either rlnCoordinateX/Y/Z columns with non-centered coordinates in pixels of the tilt series, or rlnCenteredCoordinateX/Y/ZAngst column with coordinates in Angstroms from the center of the tomograms). \n \n \
+ ASCII files may contain headers, but all lines where the first 3 columns contain numbers will be interpreted as data lines. The first 3 columns are assumed to be X, Y and Z coordinates. If 6 columns are present, columns 4,5 and 6 are assumed to be the rlnTomoSubtomogramRot/Tilt/Psi. \n \n  \
+ For text files, the options below are used to indicate whether the coordinates are relative to the centre of the tomogram (in which case they need to be provided in Angstroms, or converted thereto using a pixel size). Or if the coordinates are decentered, they need to be provided in pixels of the tilt series, possibly using a multiplicative scaling factor.");
+    joboptions["remove_substring"] = JobOption("Remove substring from filenames: ", (std::string)"", "If specified, this substring is removed from the coordinate filenames to get the tomogram names");
+    joboptions["remove_substring2"] = JobOption("Second substring to remove: ", (std::string)"", "If specified, this substring is removed from the coordinate filenames to get the tomogram names");
+	joboptions["is_center"] = JobOption("Text files contain centered coordinates?", false, "Specify Yes if coordinates in the input text files are relative to the center of the tomogram. ");
+    joboptions["scale_factor"] = JobOption("Multiply coords in text files with:", 1, 0, 20, 1, "As also mentioned above, centered coordinates should be in Angstroms, decentered coordinates should be in pixels of the (motion-corrected) tilt series. If they are not, multiply them with this factor to convert them.");
+    joboptions["add_factor"] = JobOption("Add this to coords in text files:", 0, -10, 10, 1, "After conversion of coordinates in text files to centered coordinates in Angstroms, or decentered coordinates in pixels of the tilt series, add this factor the coordinate values.");
+
 }
 
 bool RelionJob::getCommandsTomoImportJob(std::string &outputname, std::vector<std::string> &commands,
@@ -6439,34 +6469,58 @@ bool RelionJob::getCommandsTomoImportJob(std::string &outputname, std::vector<st
 	initialisePipeline(outputname, job_counter);
 	std::string command;
 
-    command = "relion_python_tomo_import SerialEM ";
-    command += " --tilt-image-movie-pattern \"" + joboptions["movie_files"].getString() + "\"";
-    command += " --mdoc-file-pattern \"" + joboptions["mdoc_files"].getString() + "\"";
-    command += " --nominal-tilt-axis-angle " + joboptions["tilt_axis_angle"].getString();
-    command += " --nominal-pixel-size " + joboptions["angpix"].getString();
-    command += " --voltage " + joboptions["kV"].getString();
-    command += " --spherical-aberration " + joboptions["Cs"].getString();
-    command += " --amplitude-contrast " + joboptions["Q0"].getString();
-    command += " --tilt-image-movie-pattern \"" + joboptions["movie_files"].getString() + "\"";
-    command += " --optics-group-name \"" + joboptions["optics_group_name"].getString() + "\"";
+    if (joboptions["do_coords"].getBoolean())
+    {
 
-    if (joboptions["dose_is_per_movie_frame"].getBoolean())
-        command += " --dose-per-movie-frame " + joboptions["dose_rate"].getString();
+        command = "relion_tomo_import_coordinates ";
+        command += " --i \"" + joboptions["in_coords"].getString() + "\"";
+        command += " --o " + outputname;
+        if (joboptions["remove_substring"].getString() != "")
+            command += " --remove_substring " + joboptions["remove_substring"].getString();
+        if (joboptions["remove_substring2"].getString() != "")
+            command += " --remove_substring2 " + joboptions["remove_substring2"].getString();
+        if (joboptions["is_center"].getBoolean())
+            command += " --centered ";
+        command += " --scale_factor " + joboptions["scale_factor"].getString();
+        command += " --add_factor " + joboptions["add_factor"].getString();
+
+        Node node(outputname + "particles.star", LABEL_IMPORT_TOMO_COORDS);
+        outputNodes.push_back(node);
+
+    }
     else
-        command += " --dose-per-tilt-image " + joboptions["dose_rate"].getString();
-    if (joboptions["prefix"].getString() != "")
-        command += " --prefix " + joboptions["prefix"].getString();
-    if (joboptions["mtf_file"].getString() != "")
-        command += " --mtf-file " + joboptions["mtf_file"].getString();
-    if (joboptions["flip_tiltseries_hand"].getBoolean())
-        command += " --invert-defocus-handedness ";
-    if (joboptions["images_are_motion_corrected"].getBoolean())
-        command += " --images-are-motion-corrected ";
+    {
 
-    command += " --output-directory " + outputname;
+        command = "relion_python_tomo_import SerialEM ";
+        command += " --tilt-image-movie-pattern \"" + joboptions["movie_files"].getString() + "\"";
+        command += " --mdoc-file-pattern \"" + joboptions["mdoc_files"].getString() + "\"";
+        command += " --nominal-tilt-axis-angle " + joboptions["tilt_axis_angle"].getString();
+        command += " --nominal-pixel-size " + joboptions["angpix"].getString();
+        command += " --voltage " + joboptions["kV"].getString();
+        command += " --spherical-aberration " + joboptions["Cs"].getString();
+        command += " --amplitude-contrast " + joboptions["Q0"].getString();
+        command += " --tilt-image-movie-pattern \"" + joboptions["movie_files"].getString() + "\"";
+        command += " --optics-group-name \"" + joboptions["optics_group_name"].getString() + "\"";
 
-    Node node(outputname+"tilt_series.star", LABEL_IMPORT_TOMOGRAMS);
-    outputNodes.push_back(node);
+        if (joboptions["dose_is_per_movie_frame"].getBoolean())
+            command += " --dose-per-movie-frame " + joboptions["dose_rate"].getString();
+        else
+            command += " --dose-per-tilt-image " + joboptions["dose_rate"].getString();
+        if (joboptions["prefix"].getString() != "")
+            command += " --prefix " + joboptions["prefix"].getString();
+        if (joboptions["mtf_file"].getString() != "")
+            command += " --mtf-file " + joboptions["mtf_file"].getString();
+        if (joboptions["flip_tiltseries_hand"].getBoolean())
+            command += " --invert-defocus-handedness ";
+        if (joboptions["images_are_motion_corrected"].getBoolean())
+            command += " --images-are-motion-corrected ";
+
+        command += " --output-directory " + outputname;
+
+        Node node(outputname + "tilt_series.star", LABEL_IMPORT_TOMOGRAMS);
+        outputNodes.push_back(node);
+
+    }
 
 	// Other arguments for extraction
 	command += " " + joboptions["other_args"].getString();
@@ -6595,6 +6649,15 @@ void RelionJob::initialiseTomoReconstructTomogramsJob()
 	joboptions["xdim"] = JobOption("Unbinned tomogram width (Xdim): ", 4000, 1, 6000, 100, "The tomogram X-dimension in unbinned pixels.");
 	joboptions["ydim"] = JobOption("Unbinned tomogram height (Ydim): ", 4000, 1, 6000, 100, "The tomogram Y-dimension in unbinned pixels.");
 	joboptions["zdim"] = JobOption("Unbinned tomogram thickness (Zdim): ", 2000, 1, 6000, 100, "The tomogram Z-dimension in unbinned pixels.");
+
+    joboptions["do_fourier"] = JobOption("Fourier-inversion with odd/even frames?", true, "When set to Yes, a Wiener-filtered reconstruction will be calculated by Fourier inversion. The SNRs of all frames will be measured from the odd/even frames, which should have thus been calculated");
+    joboptions["ctf_intact_first_peak"] =JobOption("Ignore CTFs until first peak?", true, "When set to Yes, the lowest spatial frequencies will not be boosted through CTF-correction, which will lead to a reconstruction with less low-resolution contrast, but better high-resolution details>");
+
+    joboptions["do_proj"] = JobOption("Also write 2D sums of central Z-slices?:", true, "When set to Yes, this option will result in the calculation of 2D sums of Z-slices from the reconstructed tomograms. These may be useful to quickly screen for bad tomograms using the relion_display program.");
+    joboptions["centre_proj"] = JobOption("Central Z-slice (in binned pix): ", 0., -50, 50, 10, "This defines the central Z-slice of all Z-slices that will be summed to generate the 2D projection (in pixels in the tomogram). Zero means the middle (centre) of the tomogram.");
+    joboptions["thickness_proj"] = JobOption("Number of Z-slices (in binned pix): ", 10., 1, 30, 1, "This defines how many Z-slices will be summed to generate the 2D projection (in pixels in the tomogram). Half of the slices will be above and half will be below the central slice defined above.");
+
+
 }
 
 bool RelionJob::getCommandsTomoReconstructTomogramsJob(std::string &outputname, std::vector<std::string> &commands,
@@ -6627,7 +6690,13 @@ bool RelionJob::getCommandsTomoReconstructTomogramsJob(std::string &outputname, 
 
 	if (joboptions["generate_split_tomograms"].getBoolean())
 	{
-		command += " --generate_split_tomograms ";
+		if (joboptions["do_fourier"].getBoolean())
+        {
+            error_message = "ERROR: you cannot generate tomograms for denoising with the Fourier-inversion from odd/even frames method! Disable at least one of them.";
+            return false;
+        }
+
+        command += " --generate_split_tomograms ";
 	}
 
 	command += " --w " + joboptions["xdim"].getString();
@@ -6635,6 +6704,22 @@ bool RelionJob::getCommandsTomoReconstructTomogramsJob(std::string &outputname, 
 	command += " --d " + joboptions["zdim"].getString();
 
 	command += " --binned_angpix " + joboptions["binned_angpix"].getString();
+
+    if (joboptions["do_fourier"].getBoolean())
+    {
+        command += " --fourier ";
+        if (joboptions["ctf_intact_first_peak"].getBoolean())
+        {
+            command += " --ctf_intact_first_peak ";
+        }
+    }
+
+        if (joboptions["do_proj"].getBoolean())
+	{
+		command += " --do_proj ";
+        command += " --centre_proj " + joboptions["centre_proj"].getString();
+        command += " --thickness_proj " + joboptions["thickness_proj"].getString();
+	}
 
     if (fabs(joboptions["tiltangle_offset"].getNumber(error_message)) > 0.)
     {
@@ -7323,6 +7408,21 @@ The command 'relion_refine --sym D2 --print_symmetry_ops' prints a list of all s
 RELION uses XMIPP's libraries for symmetry operations. \
 Therefore, look at the XMIPP Wiki for more details:  http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/WebHome?topic=Symmetry");
 
+
+
+    joboptions["do_helix"] = JobOption("Apply helical symmetry?", false, "If set to Yes, then apply helical symmetry in Fourier space. Note that you may also want to apply helical symmetry in real-space, but that needs to be done from the command line, using the relion_helix_toolbox...");
+    joboptions["helical_nr_asu"] = JobOption("Number of unique asymmetrical units:", 1, 1, 100, 1, "Number of unique helical asymmetrical units in each segment box. If the inter-box distance (set in segment picking step) \
+is 100 Angstroms and the estimated helical rise is ~20 Angstroms, then set this value to 100 / 20 = 5 (nearest integer). This integer should not be less than 1. The correct value is essential in measuring the \
+signal to noise ratio in helical reconstruction.");
+    joboptions["helical_twist"] =  JobOption("Helical twist (deg):", -1., -50, 50, 1, "Set helical twist (in degrees) to positive value if it is a right-handed helix. \
+Helical rise is a positive value in Angstroms.");
+    joboptions["helical_rise"] = JobOption("Helical rise (A):", 4.75, 0., 50, 0.5, "Set helical rise (in Amgstroms). This value is always positive");
+    joboptions["helical_tube_outer_diameter"] = JobOption("Outer helical diameter (A):", 200, 50, 300, 10, "Outer diameter (in Angstroms) of the reconstructed helix. Real-space averaging will be performed within this diameter");
+    joboptions["helical_z_percentage"] = JobOption("Central Z length (%):", 20., 5., 80., 1., "Reconstructed helix suffers from inaccuracies of orientation searches. \
+The central part of the box contains more reliable information compared to the top and bottom parts along Z axis, where Fourier artefacts are also present if the \
+number of helical asymmetrical units is larger than 1. Therefore, information from the central part of the box is used for searching and imposing \
+helical symmetry in real space. Set this value (%) to the central part length along Z axis divided by the box size. Values around 30% are commonly used.");
+
 }
 
 bool RelionJob::getCommandsTomoReconPartJob(std::string &outputname, std::vector<std::string> &commands,
@@ -7365,6 +7465,13 @@ bool RelionJob::getCommandsTomoReconPartJob(std::string &outputname, std::vector
     if (error_message != "") return false;
     if (SNR > 0.) command += " --SNR " + joboptions["snr"].getString();
 
+    if (joboptions["do_helix"].getBoolean())
+    {
+        command += " --nr_helical_asu " + joboptions["helical_nr_asu"].getString();
+        command += " --helical_twist " + joboptions["helical_twist"].getString();
+        command += " --helical_rise " + joboptions["helical_rise"].getString();
+    }
+
     // Running stuff
     command += " --j " + joboptions["nr_threads"].getString();
     command += " --j_out " + joboptions["nr_threads"].getString();
@@ -7380,6 +7487,34 @@ bool RelionJob::getCommandsTomoReconPartJob(std::string &outputname, std::vector
 	// Other arguments for extraction
 	command += " " + joboptions["other_args"].getString();
 	commands.push_back(command);
+
+    if (joboptions["do_helix"].getBoolean())
+    {
+        std::vector<std::string> maps;
+        maps.push_back("half1");
+        maps.push_back("half2");
+        maps.push_back("merged");
+
+        for (int i =0; i < maps.size(); i++)
+        {
+            std::string command2 = "`which relion_helix_toolbox` --impose ";
+            command2 += " --i " + outputname + maps[i] + ".mrc ";
+            command2 += " --o " + outputname + "helical_" + maps[i] + ".mrc ";
+            command2 += " --twist " + joboptions["helical_twist"].getString();
+            command2 += " --rise " + joboptions["helical_rise"].getString();
+            command2 += " --z_percentage " + floatToString(joboptions["helical_z_percentage"].getNumber(error_message) / 100.);
+            command2 += " --cyl_outer_diameter " + joboptions["helical_tube_outer_diameter"].getString();
+            commands.push_back(command2);
+
+            if (i==0 || i==2)
+            {
+                std::string mytype = (i < 2) ? LABEL_RECONSPART_HALFMAP : LABEL_RECONSPART_MAP;
+                Node node2(outputname + "helical_" + maps[i] + ".mrc", mytype);
+                outputNodes.push_back(node2);
+            }
+
+        }
+    }
 
     return prepareFinalCommand(outputname, commands, final_command, do_makedir, error_message);
 }

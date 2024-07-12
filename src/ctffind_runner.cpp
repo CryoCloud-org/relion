@@ -317,7 +317,7 @@ void CtffindRunner::initialise(bool is_leader)
 		}
 	}
 
-	if (is_leader)
+	if (is_leader && do_at_most >= 0)
 	{
 		std::cout << fn_mic_given_all.size() << " micrographs were given but we process only ";
 		std::cout  << do_at_most << " micrographs as specified in --do_at_most." << std::endl;
@@ -496,6 +496,21 @@ void CtffindRunner::joinCtffindResults()
     {
         tomogramSet.convertBackFromSingleMetaDataTable(MDctf);
         tomogramSet.write(fn_out+"tilt_series_ctf.star");
+
+        // Also save all Thon-ring diagnosis images in one star file
+        if (verb > 0) std::cout << " Saving a file called " << fn_out << "power_spectra_fits.star for visualisation of Thon ring fits..." << std::endl;
+        MetaDataTable MDpower;
+        for (long int t = 0; t < tomogramSet.tomogramTables.size(); t++)
+        {
+            FOR_ALL_OBJECTS_IN_METADATA_TABLE(tomogramSet.tomogramTables[t])
+            {
+                MDpower.addObject(tomogramSet.tomogramTables[t].getObject(current_object));
+            }
+        }
+        MDpower.deactivateLabel(EMDL_MICROGRAPH_NAME);
+        MDpower.deactivateLabel(EMDL_MICROGRAPH_MOVIE_NAME);
+        MDpower.write(fn_out+"power_spectra_fits.star");
+
     }
     else
     {
@@ -575,6 +590,8 @@ void CtffindRunner::getMySearchParameters(long int imic, RFLOAT &my_def_min, RFL
         // Simple model that increases maxres by an exponential on the dose
         RFLOAT mydose = pre_exposure_micrographs[imic];
         my_maxres = resol_max * exp(mydose/bfactor_dose);
+        //SHWS 3may2024: don't let maxres become smaller than minres!
+        my_maxres = XMIPP_MIN(my_maxres, resol_min * 0.9);
     }
 
     if (localsearch_nominal_defocus_range > 0.)
