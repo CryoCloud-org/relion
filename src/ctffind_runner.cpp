@@ -742,7 +742,7 @@ void CtffindRunner::executeCtffind4(long int imic)
 
 	// Write script to run ctffind
 	fh << "#!/usr/bin/env " << fn_shell << std::endl;
-	fh << fn_ctffind_exe << ctffind4_options << " > " << fn_log << " << EOF"<<std::endl;
+	fh << fn_ctffind_exe << ctffind4_options << " > '" << fn_log << "' << EOF"<<std::endl;
 	// line 1: input image
 	if (do_movie_thon_rings)
 	{
@@ -801,7 +801,7 @@ void CtffindRunner::executeCtffind4(long int imic)
 	fh.close();
 
 	// Execute ctffind
-	FileName command = fn_shell + " "+ fn_script;
+	FileName command = fn_shell + " '"+ fn_script + "'";
 	if (system(command.c_str()))
 		std::cerr << "WARNING: there was an error in executing: " << command << std::endl;
 
@@ -1095,8 +1095,7 @@ bool CtffindRunner::getCtffind4Results(FileName fn_microot, RFLOAT &defU, RFLOAT
 		// Find the file with the summary of the results
 		if (line.find("Summary of results") != std::string::npos)
 		{
-			tokenize(line, words);
-			fn_log = words[words.size() - 1];
+			fn_log = line.substr(46);
 			found_log = true;
 			break;
 		}
