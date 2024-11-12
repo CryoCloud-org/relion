@@ -742,7 +742,7 @@ void CtffindRunner::executeCtffind4(long int imic)
 
 	// Write script to run ctffind
 	fh << "#!/usr/bin/env " << fn_shell << std::endl;
-	fh << fn_ctffind_exe << ctffind4_options << " > " << fn_log << " << EOF"<<std::endl;
+	fh << fn_ctffind_exe << ctffind4_options << " > '" << fn_log << "' << EOF"<<std::endl;
 	// line 1: input image
 	if (do_movie_thon_rings)
 	{
@@ -801,7 +801,7 @@ void CtffindRunner::executeCtffind4(long int imic)
 	fh.close();
 
 	// Execute ctffind
-	FileName command = fn_shell + " "+ fn_script;
+	FileName command = fn_shell + " '"+ fn_script + "'";
 	if (system(command.c_str()))
 		std::cerr << "WARNING: there was an error in executing: " << command << std::endl;
 
@@ -868,7 +868,7 @@ void CtffindRunner::executeCtffind5(long int imic)
 
 	// Write script to run ctffind
 	fh << "#!/usr/bin/env " << fn_shell << std::endl;
-	fh << fn_ctffind_exe << ctffind5_options << " > " << fn_log << " << EOF" << std::endl;
+	fh << fn_ctffind_exe << ctffind5_options << " > '" << fn_log << "' << EOF" << std::endl;
 	// line 1: input image
 	if (do_movie_thon_rings)
 	{
@@ -964,7 +964,7 @@ void CtffindRunner::executeCtffind5(long int imic)
 	fh.close();
 
 	// Execute ctffind
-	FileName command = fn_shell + " " + fn_script;
+	FileName command = fn_shell + " '" + fn_script + "'";
 	if (system(command.c_str()))
 		std::cerr << "WARNING: there was an error in executing: " << command << std::endl;
 
@@ -1095,8 +1095,7 @@ bool CtffindRunner::getCtffind4Results(FileName fn_microot, RFLOAT &defU, RFLOAT
 		// Find the file with the summary of the results
 		if (line.find("Summary of results") != std::string::npos)
 		{
-			tokenize(line, words);
-			fn_log = words[words.size() - 1];
+			fn_log = line.substr(46);
 			found_log = true;
 			break;
 		}
@@ -1144,6 +1143,130 @@ bool CtffindRunner::getCtffind4Results(FileName fn_microot, RFLOAT &defU, RFLOAT
 				maxres= 999.;
 			else
 				maxres = textToFloat(words[6]);
+		}
+	}
+
+	if (!Cs_is_found)
+	{
+		if (do_warn)
+			std::cerr << " WARNING: cannot find line with acceleration voltage etc in " << fn_log << std::endl;
+		return false;
+	}
+	if (!Final_is_found)
+	{
+		if (do_warn)
+			std::cerr << "WARNING: cannot find line with Final values in " << fn_log << std::endl;
+		return false;
+	}
+
+	in2.close();
+
+    // Also try and get rlnIceRingDensity, as suggested by Rafael Leiro from the CNIO in Madrid
+    FileName fn_avrot = fn_root + "_avrot.txt";
+    std::ifstream av(fn_avrot.data(), std::ios_base::in);
+	icering = 0.;
+    if (!av.fail())
+    {
+        std::string s1, s2;
+        //skip 5 lines
+        for(int i = 0; i < 5; ++i)
+            std::getline(av, s1);
+
+        // Now get lines 6 and 7
+        std::getline(av,s1);
+        tokenize(s1, words);
+        int imin = -999;
+        int imax = -999;
+        for (int i = 0; i < words.size(); i++)
+            if (imin < 0 && textToFloat(words[i]) >= 0.25) {
+                imin = i;
+                break;
+            }
+        for (int i = imin; i < words.size(); i++)
+            if (imax < 0 && imin > 0 && textToFloat(words[i]) > 0.28) {
+                imax = i;
+                break;
+            }
+        std::getline(av,s2);
+        tokenize(s2, words);
+        for (int i = imin; i < imax; i++)
+        {
+            icering += fabs(textToFloat(words[i]));
+        }
+    }
+
+	return Final_is_found;
+}
+
+bool CtffindRunner::getCtffind5Results(FileName fn_microot, RFLOAT &defU, RFLOAT &defV, RFLOAT &defAng, RFLOAT &CC,
+		RFLOAT &HT, RFLOAT &CS, RFLOAT &AmpCnst, RFLOAT &XMAG, RFLOAT &DStep,
+		RFLOAT &maxres, RFLOAT &phaseshift, RFLOAT &icering, RFLOAT &samplethick, bool do_warn)
+{
+	FileName fn_root = getOutputFileWithNewUniqueDate(fn_microot, fn_out);
+	FileName fn_log = fn_root + "_ctffind5.log";
+	std::ifstream in(fn_log.data(), std::ios_base::in);
+	if (in.fail())
+    		return false;
+
+	// Start reading the ifstream at the top
+	in.seekg(0);
+	std::string line;
+	std::vector<std::string> words;
+	bool found_log = false;
+	while (getline(in, line, '\n'))
+	{
+		// Find the file with the summary of the results
+		if (line.find("Summary of results") != std::string::npos)
+		{
+			fn_log = line.substr(46);
+			found_log = true;
+			break;
+		}
+	}
+	in.close();
+
+	if (!found_log)
+		return false;
+
+	// Now open the file with the summry of the results
+	std::ifstream in2(fn_log.data(), std::ios_base::in);
+	if (in2.fail())
+		return false;
+	bool Final_is_found = false;
+	bool Cs_is_found = false;
+	while (getline(in2, line, '\n'))
+	{
+		// Find data_ lines
+		if (line.find("acceleration voltage:") != std::string::npos)
+		{
+			Cs_is_found = true;
+			tokenize(line, words);
+			if (words.size() < 19)
+				REPORT_ERROR("ERROR: Unexpected number of words on data line with acceleration voltage in " + fn_log);
+			CS = textToFloat(words[13]);
+			HT = textToFloat(words[8]);
+			AmpCnst = textToFloat(words[18]);
+			DStep = textToFloat(words[3]);
+			XMAG = 10000.;
+		}
+		else if (line.find("Columns: ") != std::string::npos)
+		{
+			getline(in2, line, '\n');
+			tokenize(line, words);
+			if (words.size() < 7)
+				REPORT_ERROR("ERROR: Unexpected number of words on data line below Columns line in " + fn_log);
+			Final_is_found = true;
+			defU = textToFloat(words[1]);
+			defV = textToFloat(words[2]);
+			defAng = textToFloat(words[3]);
+			if (do_phaseshift)
+				phaseshift = RAD2DEG(textToFloat(words[4]));
+			CC = textToFloat(words[5]);
+			if (words[6] == "inf")
+				maxres= 999.;
+			else
+				maxres = textToFloat(words[6]);
+			samplethick = textToFloat(words[9]);
 		}
 	}
 
@@ -1323,4 +1446,3 @@ bool CtffindRunner::getCtffind5Results(FileName fn_microot, RFLOAT &defU, RFLOAT
 
 	return Final_is_found;
 }
-
