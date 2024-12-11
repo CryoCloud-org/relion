@@ -1484,6 +1484,7 @@ void ObservationModel::saveNew(
 	particlesMdt.setName(tablename);
 	particlesMdt.write(of);
 
+	of.close();
 	std::rename(tmpfilename.c_str(), filename.c_str());
 }
 
@@ -1504,6 +1505,7 @@ void ObservationModel::save(MetaDataTable &particlesMdt, std::string filename, s
 	particlesMdt.setName(tablename);
 	particlesMdt.write(of);
 
+	of.close();
 	std::rename(tmpfilename.c_str(), filename.c_str());
 }
 
