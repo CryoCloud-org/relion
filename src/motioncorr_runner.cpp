@@ -1193,9 +1193,13 @@ bool MotioncorrRunner::executeOwnMotionCorrection(Micrograph &mic) {
 	if (fn_gain_reference != "") {
 		if (isEER)
 			renderer.loadEERGain(fn_gain_reference, Igain());
-		else
+		else {
+			if (fn_gain_reference.getExtension() == "gain") {
+				std::cout << "Gain file with .gain extension identified; reading in as TIFF. " << fn_gain_reference << std::endl;
+				fn_gain_reference.append(":tif");
+			}
 			Igain.read(fn_gain_reference);
-
+		}
 		if (XSIZE(Igain()) != nx || YSIZE(Igain()) != ny) {
 			std::cerr << "fn_mic: " << fn_mic << " nx = " << nx << " ny = " << ny << " gain nx = " << XSIZE(Igain()) << " gain ny = " << YSIZE(Igain()) <<  std::endl;
 			REPORT_ERROR("The size of the image and the size of the gain reference do not match. Make sure the gain reference has been rotated if necessary.");
