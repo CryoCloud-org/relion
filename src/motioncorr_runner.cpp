@@ -1217,7 +1217,7 @@ bool MotioncorrRunner::executeOwnMotionCorrection(Micrograph &mic) {
 				Iframes[iframe].read(fn_mic, true, frames[iframe], false, true); // mmap false, is_2D true
 			} catch (RelionError) {
 				#pragma omp critical
-					failed_frames_to_read++;
+				failed_frames_to_read++;
 			}
 		}
 	}
