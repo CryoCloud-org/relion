@@ -1209,14 +1209,25 @@ bool MotioncorrRunner::executeOwnMotionCorrection(Micrograph &mic) {
 
 	// Read images
 	RCTIC(TIMING_READ_MOVIE);
+	int failed_frames_to_read = 0;
 	#pragma omp parallel for num_threads(isCompressedMRC ? 1 : n_io_threads)
 	for (int iframe = 0; iframe < n_frames; iframe++) {
 		if (isEER)
 			renderer.renderFrames(frames[iframe] * eer_grouping + 1, (frames[iframe] + 1) * eer_grouping, Iframes[iframe]());
 		else if (isCompressedMRC)
 			compressedMRCreader.readFrameInto(Iframes[iframe], frames[iframe]);
-		else
-			Iframes[iframe].read(fn_mic, true, frames[iframe], false, true); // mmap false, is_2D true
+		else {
+			try {
+				Iframes[iframe].read(fn_mic, true, frames[iframe], false, true); // mmap false, is_2D true
+			} catch (RelionError) {
+				#pragma omp critical
+				failed_frames_to_read++;
+			}
+		}
+	}
+	if (failed_frames_to_read > 0) {
+		std::cerr << "Failed to read " << failed_frames_to_read << " frame(s) of the movie: " << fn_mic << ". Skipping movie." << std::endl;
+		return false;
 	}
 	RCTOC(TIMING_READ_MOVIE);
 
