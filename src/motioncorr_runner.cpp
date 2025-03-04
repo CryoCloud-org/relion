@@ -1018,7 +1018,7 @@ void MotioncorrRunner::generateLogFilePDFAndWriteStarFiles()
             obsModel.opticsMdt.setValue(EMDL_MICROGRAPH_PIXEL_SIZE, my_angpix);
     	}
         obsModel.save(MDavg, fn_out + "corrected_micrographs.star", "micrographs");
-        if (verb > 0) <std::<cout <<< " W<ritte<n: " <<< fn<<out << "corrected_micrographs.star" << std::endl;
+		if (verb > 0) std::cout << " Written: " << fn_out << "corrected_micrographs.star" << std::endl;
     }
 
 	if (verb > 0) std::cout << " Now generating logfile.pdf ... " << std::endl;
