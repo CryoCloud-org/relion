@@ -371,7 +371,7 @@ std::vector<std::vector<Image<Complex>>> MicrographHandler::loadMovie(
 	Micrograph micrograph = Micrograph(metaFn);
 
 	FileName movieFn = micrograph.getMovieFilename();
-	std::string gainFn = micrograph.getGainFilename();
+	FileName gainFn = micrograph.getGainFilename();
 	MultidimArray<bool> defectMask;
 
 	const bool mgHasGain = (gainFn != "");
@@ -420,6 +420,10 @@ std::vector<std::vector<Image<Complex>>> MicrographHandler::loadMovie(
 			}
 			else
 			{
+			    if (gainFn.getExtension() == "gain") {
+					std::cout << "Gain file with .gain extension identified; reading in as TIFF. " << gainFn << std::endl;
+					gainFn.append(":tif");
+			    }
 				lastGainRef.read(gainFn);
 			}
 		}
