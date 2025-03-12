@@ -503,6 +503,8 @@ void MotioncorrRunner::run()
 		barstep = XMIPP_MAX(1, fn_micrographs.size() / 60);
 	}
 
+	std::vector<FileName> failed_micrographs;
+
 	for (long int imic = 0; imic < fn_micrographs.size(); imic++)
 	{
 		if (verb > 0 && imic % barstep == 0)
@@ -512,37 +514,61 @@ void MotioncorrRunner::run()
 		if (pipeline_control_check_abort_job())
 			exit(RELION_EXIT_ABORTED);
 
-		Micrograph mic(fn_micrographs[imic], fn_gain_reference, bin_factor, eer_upsampling, eer_grouping);
+		try
+		{
+			Micrograph mic(fn_micrographs[imic], fn_gain_reference, bin_factor, eer_upsampling, eer_grouping);
 
-        // Set per-micrograph pre_exposure
-        mic.pre_exposure = pre_exposure + pre_exposure_micrographs[imic];
+			// Set per-micrograph pre_exposure
+			mic.pre_exposure = pre_exposure + pre_exposure_micrographs[imic];
 
-        // Get angpix and voltage from the optics groups:
-		obsModel.opticsMdt.getValue(EMDL_CTF_VOLTAGE, voltage, optics_group_micrographs[imic]-1);
-		obsModel.opticsMdt.getValue(EMDL_MICROGRAPH_ORIGINAL_PIXEL_SIZE, angpix, optics_group_micrographs[imic]-1);
+			// Get angpix and voltage from the optics groups:
+			obsModel.opticsMdt.getValue(EMDL_CTF_VOLTAGE, voltage, optics_group_micrographs[imic] - 1);
+			obsModel.opticsMdt.getValue(EMDL_MICROGRAPH_ORIGINAL_PIXEL_SIZE, angpix, optics_group_micrographs[imic] - 1);
 
-		bool result = false;
-		if (do_own)
-			result = executeOwnMotionCorrection(mic);
-		else if (do_motioncor2)
-			result = executeMotioncor2(mic);
-		else
-			REPORT_ERROR("Bug: by now it should be clear whether to use MotionCor2 or own implementation ...");
+			bool result = false;
+			if (do_own)
+				result = executeOwnMotionCorrection(mic);
+			else if (do_motioncor2)
+				result = executeMotioncor2(mic);
+			else
+				REPORT_ERROR("Bug: by now it should be clear whether to use MotionCor2 or own implementation ...");
 
-		if (result) {
-			saveModel(mic);
-			plotShifts(fn_micrographs[imic], mic);
+			if (result)
+			{
+				saveModel(mic);
+				plotShifts(fn_micrographs[imic], mic);
+			}
+			else
+			{
+				failed_micrographs.push_back(fn_micrographs[imic]);
+				std::cerr << " WARNING: Motion correction failed for: " << fn_micrographs[imic] << std::endl;
+			}
+		}
+		catch (...)
+		{
+			failed_micrographs.push_back(fn_micrographs[imic]);
+			std::cerr << " WARNING: Unknown error during motion correction for micrograph: " << fn_micrographs[imic] << std::endl;
+			continue; // Skip to next micrograph
 		}
 	}
 
 	if (verb > 0)
 		progress_bar(fn_micrographs.size());
 
+	// Report failed micrographs
+	if (!failed_micrographs.empty())
+	{
+		std::cerr << std::endl
+				  << " WARNING: Motion correction failed for " << failed_micrographs.size() << " micrograph(s):" << std::endl;
+		for (const auto &fn : failed_micrographs)
+			std::cerr << "          " << fn << std::endl;
+	}
+
 	// Make a logfile with the shifts in pdf format and write output STAR files
 	generateLogFilePDFAndWriteStarFiles();
 
 #ifdef TIMING
-        MCtimer.printTimes(false);
+	MCtimer.printTimes(false);
 #endif
 #ifdef TIMING_FFTW
 	timer_fftw.printTimes(false);
@@ -992,7 +1018,7 @@ void MotioncorrRunner::generateLogFilePDFAndWriteStarFiles()
             obsModel.opticsMdt.setValue(EMDL_MICROGRAPH_PIXEL_SIZE, my_angpix);
     	}
         obsModel.save(MDavg, fn_out + "corrected_micrographs.star", "micrographs");
-        if (verb > 0) std::cout << " Written: " << fn_out << "corrected_micrographs.star" << std::endl;
+		if (verb > 0) std::cout << " Written: " << fn_out << "corrected_micrographs.star" << std::endl;
     }
 
 	if (verb > 0) std::cout << " Now generating logfile.pdf ... " << std::endl;
