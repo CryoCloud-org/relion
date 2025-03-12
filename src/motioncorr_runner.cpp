@@ -544,11 +544,11 @@ void MotioncorrRunner::run()
 				std::cerr << " WARNING: Motion correction failed for: " << fn_micrographs[imic] << std::endl;
 			}
 		}
-		catch (RelionError &e)
+		catch (...)
 		{
 			failed_micrographs.push_back(fn_micrographs[imic]);
-			std::cerr << " WARNING: Motion correction failed for micrograph: " << fn_micrographs[imic] << std::endl;
-			std::cerr << "          " << e.msg << std::endl;
+			std::cerr << " WARNING: Unknown error during motion correction for micrograph: " << fn_micrographs[imic] << std::endl;
+			continue; // Skip to next micrograph
 		}
 	}
 
