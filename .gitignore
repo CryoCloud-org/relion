@@ -9,3 +9,6 @@ external
 .project
 Debug
 *.pyc
+
+
+test_data/*

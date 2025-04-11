@@ -194,6 +194,11 @@ enum EMDLabel
     EMDL_IMAGE_COORD_X,
 	EMDL_IMAGE_COORD_Y,
 	EMDL_IMAGE_COORD_Z,
+
+	EMDL_PARTICLE_WIDTH,
+  	EMDL_PARTICLE_HEIGHT,
+  	EMDL_PARTICLE_AREA,
+
 	EMDL_IMAGE_FRAME_NR,
 	EMDL_IMAGE_MAGNIFICATION_CORRECTION,
 	EMDL_IMAGE_NORM_CORRECTION,
@@ -923,6 +928,11 @@ private:
 		EMDL::addLabel(EMDL_IMAGE_COORD_X, EMDL_DOUBLE, "rlnCoordinateX", "X-Position of an image in a micrograph (in pixels)");
 		EMDL::addLabel(EMDL_IMAGE_COORD_Y, EMDL_DOUBLE, "rlnCoordinateY", "Y-Position of an image in a micrograph (in pixels)");
 		EMDL::addLabel(EMDL_IMAGE_COORD_Z, EMDL_DOUBLE, "rlnCoordinateZ", "Z-Position of an image in a 3D micrograph, i.e. tomogram (in pixels)");
+
+		EMDL::addLabel(EMDL_PARTICLE_WIDTH, EMDL_INT, "rlnParticleWidth", "");
+		EMDL::addLabel(EMDL_PARTICLE_HEIGHT, EMDL_INT, "rlnParticleHeight", "");
+		EMDL::addLabel(EMDL_PARTICLE_AREA, EMDL_INT, "rlnParticleArea", "");
+
 		EMDL::addLabel(EMDL_IMAGE_FRAME_NR, EMDL_INT, "rlnMovieFrameNumber", "Number of a movie frame");
 		EMDL::addLabel(EMDL_IMAGE_NORM_CORRECTION, EMDL_DOUBLE, "rlnNormCorrection", "Normalisation correction value for an image");
 		EMDL::addLabel(EMDL_IMAGE_MAGNIFICATION_CORRECTION, EMDL_DOUBLE, "rlnMagnificationCorrection", "Magnification correction value for an image");

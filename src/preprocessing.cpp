@@ -18,6 +18,7 @@
  * author citations must be preserved.
  ***************************************************************************/
 #include "src/preprocessing.h"
+#include <stdexcept>
 
 //#define PREP_TIMING
 #ifdef PREP_TIMING
@@ -50,6 +51,7 @@ void Preprocessing::read(int argc, char **argv, int rank)
 	fn_coord_suffix = parser.getOption("--coord_suffix", "The suffix for the coordinate files, e.g. \"_picked.star\" or \".box\"","");
 	fn_coord_dir = parser.getOption("--coord_dir", "The directory where the coordinate files are (default is same as micrographs)", "ASINPUT");
 	fn_coord_list = parser.getOption("--coord_list", "Alternative to coord_suffix&dir: provide a 2-column STAR file with micrographs and coordinate files","");
+	fn_all_agg_coords = parser.getOption("--all_agg_coords", "Alternative to coord_suffix&dir: provide a 2-column STAR file with micrograph name and all coordinates","");
 	fn_part_dir = parser.getOption("--part_dir", "Output directory for particle stacks", "Particles/");
 	fn_part_star = parser.getOption("--part_star", "Output STAR file with all particles metadata", "");
 	fn_pick_star = parser.getOption("--pick_star", "Output STAR file with 2 columns for micrographs and coordinate files", "");
@@ -133,8 +135,12 @@ void Preprocessing::initialise()
 			if (fn_data != "") c++;
 			if (fn_coord_suffix != "") c++;
 			if (fn_coord_list != "") c++;
+			if (fn_all_agg_coords != "") c++;
+
+
+            // You have to pick either fn_data, or fn_coord_suffix & fn_coord_list
 			if (c != 1)
-				REPORT_ERROR("Preprocessing::initialise ERROR: please provide (only) one of these three options: --reextract_data_star, --coord_suffix & --coord_list ");
+				REPORT_ERROR("Preprocessing::initialise ERROR: please provide (only) one of these four options: --reextract_data_star, --coord_suffix, --coord_list & --fn_all_agg_coords ");
 
 			if (extract_size < 0)
 				REPORT_ERROR("Preprocessing::initialise ERROR: please provide the size of the box to extract particle using --extract_size ");
@@ -169,6 +175,11 @@ void Preprocessing::initialise()
 			REPORT_ERROR("Preprocessing::initialise ERROR: No CTF information found in the input micrograph STAR-file");
 
 		mic_star_has_ctf = MDmics.containsLabel(EMDL_CTF_DEFOCUSU);
+
+
+//        throw std::runtime_error("Reache start of function");
+
+
 
 		micname2coordname.clear();
 		if (fn_data != "")
@@ -209,6 +220,7 @@ void Preprocessing::initialise()
 			// Either get coordinate filenames from coord_list, or from the fn_coord_suffix
 			if (fn_coord_list != "")
 			{
+				// we have never used this option,
 				MetaDataTable MDcoords;
 				MDcoords.read(fn_coord_list);
 				FOR_ALL_OBJECTS_IN_METADATA_TABLE(MDcoords)
@@ -219,8 +231,81 @@ void Preprocessing::initialise()
 					micname2coordname[fn_mic] = fn_coord;
 				}
 			}
+			else if (fn_all_agg_coords != "")
+			{
+				MetaDataTable MD_all_coords;
+                MD_all_coords.read(fn_all_agg_coords);
+
+                // Prepare split coord directory
+                const std::string split_coord_dir_sub_dir = "particle_starfiles/";
+                FileName split_coord_dir = fn_part_dir + split_coord_dir_sub_dir; // e.g. "Extract/2/particle_starfiles/"
+
+                // Create the split coord directory
+                std::string command = "mkdir -p " + split_coord_dir;
+                int res = system(command.c_str());
+
+				FOR_ALL_OBJECTS_IN_METADATA_TABLE(MDmics)
+                {
+                    // Get the micrograph full path
+                    FileName fn_mic_path;
+			        MDmics.getValue(EMDL_MICROGRAPH_NAME, fn_mic_path);
+					FileName fn_mic = fn_mic_path.getBaseName();
+
+					// Collect relevant coordinates
+                    MetaDataTable MDMicrographCoords;
+
+                    FOR_ALL_OBJECTS_IN_METADATA_TABLE(MD_all_coords)
+                    {
+                        FileName coordsMicName;
+                        MD_all_coords.getValue(EMDL_MICROGRAPH_NAME, coordsMicName);
+
+                        // If coords name is matches mic name then pop it and use it to write split file
+                        if (fn_mic == coordsMicName.withoutExtension())
+                        {
+                                // Grab keys from current row in particles.star
+                                RFLOAT xcoor, ycoor, fom;
+                                int classnumber, width, height, area;
+
+                                MD_all_coords.getValue(EMDL_IMAGE_COORD_X, xcoor);
+                                MD_all_coords.getValue(EMDL_IMAGE_COORD_Y, ycoor);
+                                MD_all_coords.getValue(EMDL_PARTICLE_AUTOPICK_FOM, fom);
+                                MD_all_coords.getValue(EMDL_PARTICLE_CLASS, classnumber);
+                                MD_all_coords.getValue(EMDL_PARTICLE_WIDTH, width);
+                                MD_all_coords.getValue(EMDL_PARTICLE_HEIGHT, height);
+                                MD_all_coords.getValue(EMDL_PARTICLE_AREA, area);
+
+//                                std::cout << "Found matching micrograph: " << coordsMicName << std::endl;
+//                                std::cout << "  X coordinate: " << xcoor << std::endl;
+//                                std::cout << "  Y coordinate: " << ycoor << std::endl;
+//                                std::cout << "  FOM value: " << fom << std::endl;
+//                                std::cout << "  Class number: " << classnumber << std::endl;
+//                                std::cout << "  Area: " << area << std::endl;
+//                                std::cout << "  Width: " << width << std::endl;
+//                                std::cout << "  Height: " << height << std::endl;
+
+                                MDMicrographCoords.addObject();
+                                MDMicrographCoords.setValue(EMDL_IMAGE_COORD_X, xcoor);
+                                MDMicrographCoords.setValue(EMDL_IMAGE_COORD_Y, ycoor);
+                                MDMicrographCoords.setValue(EMDL_PARTICLE_AUTOPICK_FOM, fom);
+                                MDMicrographCoords.setValue(EMDL_PARTICLE_CLASS, classnumber);
+                                MDMicrographCoords.setValue(EMDL_PARTICLE_WIDTH, width);
+                                MDMicrographCoords.setValue(EMDL_PARTICLE_HEIGHT, height);
+                                MDMicrographCoords.setValue(EMDL_PARTICLE_AREA, area);
+                        }
+                    }
+
+                    // Write out the per micrograph coordinates
+                    FileName starfile_name = fn_mic + "_particles.star"; // e.g. "micrograph_1_particles.star"
+                    FileName coord_file_name = split_coord_dir + starfile_name; // e.g. "Extract/2/particle_starfiles/micrograph_1_particles.star"
+
+                    MDMicrographCoords.write(coord_file_name);
+
+                    micname2coordname[fn_mic_path] = coord_file_name;
+                }
+			}
 			else
 			{
+                // This is where we use fn_coord_dir and fn_coord_suffix
 
 				// Make sure the coordinate file directory names end with a '/'
 				if (fn_coord_dir != "ASINPUT" && fn_coord_dir[fn_coord_dir.length()-1] != '/')
@@ -230,11 +315,14 @@ void Preprocessing::initialise()
 				{
 					FileName fn_mic, fn_pre, fn_jobnr, fn_post;
 					MDmics.getValue(EMDL_MICROGRAPH_NAME, fn_mic);
+
+					// set fn_post, which is the name of the micrograph will all relion path structure
 					decomposePipelineFileName(fn_mic, fn_pre, fn_jobnr, fn_post);
+
+	                // Link fn_mic to it's fn_coord file, use path structure dir and suffix
 					FileName fn_coord = fn_coord_dir + fn_post.withoutExtension() + fn_coord_suffix;
 					micname2coordname[fn_mic] = fn_coord;
 				}
-
 			}
 
 			// Loop over all micrographs in the input STAR file and warn of coordinate file or micrograph file do not exist

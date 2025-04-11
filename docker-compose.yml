@@ -1,0 +1,12 @@
+version: '3'
+services:
+  relion-dev:
+    build:
+      context: .
+      dockerfile: relion-dev-macos.Dockerfile
+    volumes:
+      - ./:/app/relion  # Mount your local Relion code
+      - ./build:/app/relion/build  # Persist build files between runs
+      - ./data:/data    # Mount your data directory
+    working_dir: /app/relion
+    command: tail -f /dev/null

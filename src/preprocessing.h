@@ -85,6 +85,9 @@ public:
 	// Alternative to fn_coord_suffix: a list of all coordinate files
 	FileName fn_coord_list;
 
+	// Alternative to fn_coord_suffix: provide a STAR file with all coordinates columns and mic name column
+	FileName fn_all_agg_coords;
+
 	// STAR file with refined particle coordinates (to re-extract particles, for example with different binning)
 	FileName fn_data;
 
