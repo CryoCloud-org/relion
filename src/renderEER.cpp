@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <regex>
 #include <omp.h>
 
 #include <src/time.h>
@@ -43,10 +44,21 @@ TIFFErrorHandler EERRenderer::prevTIFFWarningHandler = NULL;
 
 void EERRenderer::TIFFWarningHandler(const char* module, const char* fmt, va_list ap)
 {
-	// Silence warnings for private tags
-	if (strcmp("Unknown field with tag %d (0x%x) encountered", fmt) == 0)
-		return;
+	// Silence warnings for EER tags that are unknown to standard TIFF
+	char buf[1024];
+	vsnprintf(buf, sizeof(buf), fmt, ap);
 
+	std::string msg = buf;
+
+	// Example: extract the tag number
+	std::regex re(R"(Unknown field with tag (\d+))");
+	std::smatch m;
+	if (std::regex_search(msg, m, re)) {
+		int tag = std::stoi(m[1].str());
+		if ((tag >= EERRenderer::TIFF_COMPRESSION_EER8bit) && (tag <= EERRenderer::TIFFTAG_EER_SUBPIXEL_V_DEPTH)) {
+			return;
+		}
+	}
 	if (prevTIFFWarningHandler != NULL)
 		prevTIFFWarningHandler(module, fmt, ap);
 }
