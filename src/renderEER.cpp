@@ -43,9 +43,13 @@ TIFFErrorHandler EERRenderer::prevTIFFWarningHandler = NULL;
 
 void EERRenderer::TIFFWarningHandler(const char* module, const char* fmt, va_list ap)
 {
-	// Silence warnings for private tags
-	if (strcmp("Unknown field with tag %d (0x%x) encountered", fmt) == 0)
-		return;
+	char buf[1024];
+	vsnprintf(buf, sizeof(buf), fmt, ap);
+	unsigned int tag = 0;
+	if (sscanf(buf, "Unknown field with tag %u", &tag) == 1) {
+	    // suppress private tags > 65000, which include all EER tags
+	    if (tag >= 65000) return;
+	}
 
 	if (prevTIFFWarningHandler != NULL)
 		prevTIFFWarningHandler(module, fmt, ap);
