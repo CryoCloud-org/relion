@@ -1060,7 +1060,7 @@ long int MetaDataTable::readStarLoop(std::ifstream& in, bool do_only_count)
 
 			if (label == EMDL_UNDEFINED)
 			{
-				std::cerr << " + WARNING: will ignore (but maintain) values for the unknown label: " << token << std::endl;
+				//std::cerr << " + WARNING: will ignore (but maintain) values for the unknown label: " << token << std::endl;
 				label = EMDL_UNKNOWN_LABEL;
 			}
 
@@ -1162,7 +1162,7 @@ bool MetaDataTable::readStarList(std::ifstream& in)
 				label = EMDL_UNKNOWN_LABEL;
 				addLabel(label, token);
 				setUnknownValue(labelPosition, value);
-				std::cerr << " + WARNING: will ignore (but maintain) values for the unknown label: " << token << std::endl;
+				//std::cerr << " + WARNING: will ignore (but maintain) values for the unknown label: " << token << std::endl;
 			}
 			else
 			{
