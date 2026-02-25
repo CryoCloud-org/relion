@@ -70,7 +70,9 @@ class MotionEstimator
             const std::vector<std::vector<gravis::d2Vector>>& inTracks,
             double sig_vel_px, double sig_acc_px, double sig_div_px,
             const std::vector<gravis::d2Vector>& positions,
-            const std::vector<gravis::d2Vector>& globComp) const;
+            const std::vector<gravis::d2Vector>& globComp,
+			bool log_loss_terms = false,
+			const std::string& loss_context = "") const;
 
         // syntactic sugar for float-valued CCs
         std::vector<std::vector<gravis::d2Vector>> optimize(
@@ -78,7 +80,9 @@ class MotionEstimator
             const std::vector<std::vector<gravis::d2Vector>>& inTracks,
             double sig_vel_px, double sig_acc_px, double sig_div_px,
             const std::vector<gravis::d2Vector>& positions,
-            const std::vector<gravis::d2Vector>& globComp) const;
+            const std::vector<gravis::d2Vector>& globComp,
+			bool log_loss_terms = false,
+			const std::string& loss_context = "") const;
 
 	std::vector<Image<RFLOAT>> computeDamageWeights(int opticsGroup);
 		
@@ -105,6 +109,7 @@ class MotionEstimator
     protected:
 
             bool paramsRead, ready;
+			bool print_loss_terms, loss_logging_active;
 
             // read from cmd line
             int maxEDs, maxIters, globOffMax, group;

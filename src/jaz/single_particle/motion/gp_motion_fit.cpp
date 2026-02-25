@@ -156,6 +156,81 @@ double GpMotionFit::f(const std::vector<double> &x) const
 	return e_tot;
 }
 
+GpMotionFit::LossTerms GpMotionFit::evaluateLossTerms(const std::vector<double> &x) const
+{
+	std::vector<std::vector<d2Vector>> pos(pc, std::vector<d2Vector>(fc));
+	paramsToPos(x, pos);
+
+	const int pad = 512;
+	std::vector<double> data_t(pad * threads, 0.0);
+	std::vector<double> vel_t(pad * threads, 0.0);
+	std::vector<double> acc_t(pad * threads, 0.0);
+
+#pragma omp parallel for num_threads(threads)
+	for (int p = 0; p < pc; p++)
+	{
+		const int t = omp_get_thread_num();
+
+		for (int f = 0; f < fc; f++)
+		{
+			data_t[pad*t] -= Interpolation::cubicXY(
+				correlation[p][f],
+				cc_pad * (pos[p][f].x + perFrameOffsets[f].x),
+				cc_pad * (pos[p][f].y + perFrameOffsets[f].y),
+				0, 0, true);
+		}
+	}
+
+#pragma omp parallel for num_threads(threads)
+	for (int f = 0; f < fc-1; f++)
+	{
+		const int t = omp_get_thread_num();
+
+		for (int d = 0; d < dc; d++)
+		{
+			const double cx = x[2*(pc + dc*f + d)    ];
+			const double cy = x[2*(pc + dc*f + d) + 1];
+
+			vel_t[pad*t] += cx*cx + cy*cy;
+		}
+	}
+
+	if (sig_acc_px > 0.0)
+	{
+#pragma omp parallel for num_threads(threads)
+		for (int f = 0; f < fc-2; f++)
+		{
+			const int t = omp_get_thread_num();
+
+			for (int d = 0; d < dc; d++)
+			{
+				const double cx0 = x[2*(pc + dc*f + d)    ];
+				const double cy0 = x[2*(pc + dc*f + d) + 1];
+				const double cx1 = x[2*(pc + dc*(f+1) + d)    ];
+				const double cy1 = x[2*(pc + dc*(f+1) + d) + 1];
+
+				const double dcx = cx1 - cx0;
+				const double dcy = cy1 - cy0;
+
+				acc_t[pad*t] += eigenVals[d]*(dcx*dcx + dcy*dcy) / (sig_acc_px*sig_acc_px);
+			}
+		}
+	}
+
+	LossTerms terms{0.0, 0.0, 0.0, 0.0};
+
+	for (int t = 0; t < threads; t++)
+	{
+		terms.data += data_t[pad*t];
+		terms.vel_reg += vel_t[pad*t];
+		terms.acc_reg += acc_t[pad*t];
+	}
+
+	terms.total = terms.data + terms.vel_reg + terms.acc_reg;
+
+	return terms;
+}
+
 double GpMotionFit::f(const std::vector<double> &x, void* tempStorage) const
 {
 	if (tempStorage == 0) return f(x);
