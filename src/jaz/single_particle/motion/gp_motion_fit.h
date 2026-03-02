@@ -30,6 +30,14 @@ class GpMotionFit : public DifferentiableOptimization
 {
     public:
 
+		struct LossTerms
+		{
+			double data;
+			double vel_reg;
+			double acc_reg;
+			double total;
+		};
+
         GpMotionFit(
                 const std::vector<std::vector<Image<double>>>& correlation,
                 double cc_pad,
@@ -41,6 +49,7 @@ class GpMotionFit : public DifferentiableOptimization
 
         double f(const std::vector<double>& x) const;
         double f(const std::vector<double>& x, void* tempStorage) const;
+		LossTerms evaluateLossTerms(const std::vector<double>& x) const;
 
         void grad(const std::vector<double>& x, std::vector<double>& gradDest) const;
         void grad(const std::vector<double>& x, std::vector<double>& gradDest, void* tempStorage) const;

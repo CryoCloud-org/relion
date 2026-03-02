@@ -36,12 +36,41 @@
 #include <src/jaz/optimization/lbfgs.h>
 #include <src/jaz/util/zio.h>
 
+#include <iomanip>
 
 using namespace gravis;
 
 MotionEstimator::MotionEstimator()
-	:   paramsRead(false), ready(false)
+	:   paramsRead(false), ready(false),
+		print_loss_terms(false), loss_logging_active(false)
 {
+}
+
+namespace
+{
+	void printLossTermsLine(
+			const std::string& micrograph_context,
+			const char* phase,
+			const GpMotionFit::LossTerms& terms)
+	{
+		std::ios::fmtflags old_flags = std::cout.flags();
+		std::streamsize old_precision = std::cout.precision();
+
+		std::cout.setf(std::ios::fixed, std::ios::floatfield);
+		std::cout.precision(8);
+
+		std::cout << " [motion_loss]"
+		          << " micrograph=" << micrograph_context
+		          << " phase=" << phase
+		          << " data=" << terms.data
+		          << " vel_reg=" << terms.vel_reg
+		          << " acc_reg=" << terms.acc_reg
+		          << " total=" << terms.total
+		          << std::endl;
+
+		std::cout.flags(old_flags);
+		std::cout.precision(old_precision);
+	}
 }
 
 void MotionEstimator::read(IOParser& parser, int argc, char *argv[])
@@ -77,6 +106,7 @@ void MotionEstimator::read(IOParser& parser, int argc, char *argv[])
 	params_scaled_by_dose = !parser.checkOption("--absolute_params", "Do not scale input motion parameters by dose");
 
 	debugOpt = parser.checkOption("--debug_opt", "Write optimization debugging info");
+	print_loss_terms = parser.checkOption("--print_loss_terms", "Print first/final per-term motion losses (data, velocity and acceleration)");
 
 	global_init = parser.checkOption("--gi", "Initialize with global trajectories instead of loading them from metadata file");
 	expKer = !parser.checkOption("--sq_exp_ker", "Use a square-exponential kernel instead of an exponential one");
@@ -109,6 +139,7 @@ void MotionEstimator::init(
 	this->obsModel = obsModel;
 	this->micrographHandler = micrographHandler;
 	angpix = obsModel->getPixelSizes();
+	loss_logging_active = print_loss_terms && (verb > 0);
 
 	s_ref = reference->s;
 	sh_ref = s_ref/2 + 1;
@@ -254,8 +285,10 @@ void MotionEstimator::process(
 
 		if (!all_groups && !obsModel->containsGroup(mdts[g], group)) continue;
 
+		const std::string fn_root = MotionRefiner::getOutputFileNameRoot(outPath, mdts[g]);
+
 		// Make sure output directory exists
-		FileName newdir = MotionRefiner::getOutputFileNameRoot(outPath, mdts[g]);
+		FileName newdir = fn_root;
 		newdir = newdir.beforeLastOf("/");
 
 		if (debug)
@@ -323,14 +356,12 @@ void MotionEstimator::process(
 			tracks = optimize(
 				movieCC, initialTracks,
 				sig_vel_px, sig_acc_px, sig_div_px,
-				positions, globComp);
+				positions, globComp, loss_logging_active, fn_root);
 		}
 		else
 		{
 			tracks = initialTracks;
 		}
-
-		std::string fn_root = MotionRefiner::getOutputFileNameRoot(outPath, mdts[g]);
 
 		bool hasNaNs = false;
 
@@ -527,7 +558,9 @@ std::vector<std::vector<d2Vector>> MotionEstimator::optimize(
 		const std::vector<std::vector<gravis::d2Vector>>& inTracks,
 		double sig_vel_px, double sig_acc_px, double sig_div_px,
 		const std::vector<gravis::d2Vector>& positions,
-		const std::vector<gravis::d2Vector>& globComp) const
+		const std::vector<gravis::d2Vector>& globComp,
+		bool log_loss_terms,
+		const std::string& loss_context) const
 {
 	if (maxIters == 0) return inTracks;
 
@@ -556,8 +589,20 @@ std::vector<std::vector<d2Vector>> MotionEstimator::optimize(
 
 	gpmf.posToParams(inTracks, initialCoeffs);
 
+	if (log_loss_terms)
+	{
+		const GpMotionFit::LossTerms terms = gpmf.evaluateLossTerms(initialCoeffs);
+		printLossTermsLine(loss_context, "initial", terms);
+	}
+
 	std::vector<double> optCoeffs = LBFGS::optimize(
 				initialCoeffs, gpmf, debugOpt, maxIters, optEps);
+
+	if (log_loss_terms)
+	{
+		const GpMotionFit::LossTerms terms = gpmf.evaluateLossTerms(optCoeffs);
+		printLossTermsLine(loss_context, "final", terms);
+	}
 
 	std::vector<std::vector<d2Vector>> out(pc, std::vector<d2Vector>(fc));
 	gpmf.paramsToPos(optCoeffs, out);
@@ -576,7 +621,9 @@ std::vector<std::vector<d2Vector>> MotionEstimator::optimize(
 		const std::vector<std::vector<gravis::d2Vector>>& inTracks,
 		double sig_vel_px, double sig_acc_px, double sig_div_px,
 		const std::vector<gravis::d2Vector>& positions,
-		const std::vector<gravis::d2Vector>& globComp) const
+		const std::vector<gravis::d2Vector>& globComp,
+		bool log_loss_terms,
+		const std::string& loss_context) const
 {
 	const int pc = movieCC.size();
 	const int fc = movieCC[0].size();
@@ -602,7 +649,8 @@ std::vector<std::vector<d2Vector>> MotionEstimator::optimize(
 		}
 	}
 
-	return optimize(CCd, inTracks, sig_vel_px, sig_acc_px, sig_div_px, positions, globComp);
+	return optimize(CCd, inTracks, sig_vel_px, sig_acc_px, sig_div_px, positions, globComp,
+	                log_loss_terms, loss_context);
 }
 
 std::vector<Image<RFLOAT>> MotionEstimator::computeDamageWeights(int opticsGroup)
