@@ -112,7 +112,10 @@ void init_progress_bar(long total)
 // routine must be in ascending order, ie, 0, 1, 2, ... No. elements
 void progress_bar(long rlen)
 {
-	if (!isatty(fileno(stdout)))
+	// Suppress animation when stdout is not an interactive terminal, or when
+	// running inside MPI (OpenMPI sets OMPI_COMM_WORLD_RANK; MPICH/Intel MPI set PMI_RANK).
+	// MPI stdout forwarding can make isatty() return 1 for worker ranks even in containers.
+	if (!isatty(fileno(stdout)) || getenv("OMPI_COMM_WORLD_RANK") || getenv("PMI_RANK"))
 		return;
 
 	static time_t startt, prevt;
