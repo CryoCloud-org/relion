@@ -132,7 +132,7 @@ void progress_bar(long rlen)
 		last_pct_reported = -1;
 		if (non_interactive)
 		{
-			fprintf(stdout, "  0%% [  0.00/   ??? hrs]\n");
+			fprintf(stdout, "  0%% [-----] [  0.00/   ??? hrs]\n");
 			fflush(stdout);
 			last_pct_reported = 0;
 		}
@@ -162,30 +162,36 @@ void progress_bar(long rlen)
 		t1 = currt - startt;
 		t2 = (rlen > 0) ? (long)(t1 * (float)totlen / rlen) : 0;
 
+		int filled = (rlen >= totlen) ? 5 : milestone / 20;
+		char bar[6];
+		for (int b = 0; b < 5; b++)
+			bar[b] = (b < filled) ? '#' : '-';
+		bar[5] = '\0';
+
 		if (t2 > 3600 || t1 > 3600)
 		{
 			h1 = (float)t1 / 3600.0;
 			h2 = (float)t2 / 3600.0;
 			if (rlen >= totlen)
-				fprintf(stdout, "100%% [%6.2f/%6.2f hrs] done\n", h1, h2);
+				fprintf(stdout, "100%% [%s] [%6.2f/%6.2f hrs] done\n", bar, h1, h2);
 			else
-				fprintf(stdout, "%3d%% [%6.2f/%6.2f hrs]\n", milestone, h1, h2);
+				fprintf(stdout, "%3d%% [%s] [%6.2f/%6.2f hrs]\n", milestone, bar, h1, h2);
 		}
 		else if (t2 > 60 || t1 > 60)
 		{
 			m1 = (float)t1 / 60.0;
 			m2 = (float)t2 / 60.0;
 			if (rlen >= totlen)
-				fprintf(stdout, "100%% [%6.2f/%6.2f min] done\n", m1, m2);
+				fprintf(stdout, "100%% [%s] [%6.2f/%6.2f min] done\n", bar, m1, m2);
 			else
-				fprintf(stdout, "%3d%% [%6.2f/%6.2f min]\n", milestone, m1, m2);
+				fprintf(stdout, "%3d%% [%s] [%6.2f/%6.2f min]\n", milestone, bar, m1, m2);
 		}
 		else
 		{
 			if (rlen >= totlen)
-				fprintf(stdout, "100%% [%4lu/%4lu sec] done\n", t1, t2);
+				fprintf(stdout, "100%% [%s] [%4lu/%4lu sec] done\n", bar, t1, t2);
 			else
-				fprintf(stdout, "%3d%% [%4lu/%4lu sec]\n", milestone, t1, t2);
+				fprintf(stdout, "%3d%% [%s] [%4lu/%4lu sec]\n", milestone, bar, t1, t2);
 		}
 		fflush(stdout);
 		last_pct_reported = (rlen >= totlen) ? 100 : milestone;
