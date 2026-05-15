@@ -112,87 +112,142 @@ void init_progress_bar(long total)
 // routine must be in ascending order, ie, 0, 1, 2, ... No. elements
 void progress_bar(long rlen)
 {
-	static time_t startt, prevt;
-	time_t currt;
+	static time_t startt;
 	static long totlen;
+	static int last_pct_reported;
+	time_t currt;
 	long t1, t2;
-	int min, i, hour;
 	float h1, h2, m1, m2;
 
 	if (rlen == 0)
 		return;
 	currt = time(NULL);
 
+	bool non_interactive = !isatty(fileno(stdout)) || getenv("OMPI_COMM_WORLD_RANK") || getenv("PMI_RANK");
+
 	if (rlen < 0)
 	{
 		totlen = -rlen;
-		prevt = startt = currt;
-		fprintf(stdout, "000/??? sec ");
-		fprintf(stdout, "~~(,_,\">");
-		for (i = 1; i < 10; i++)
-			fprintf(stdout, "      ");
-		fprintf(stdout, "    [oo]");
-		fflush(stdout);
+		startt = currt;
+		last_pct_reported = -1;
+		if (non_interactive)
+		{
+			fprintf(stdout, "  0%% [-----] [  0.00/   ??? hrs]\n");
+			fflush(stdout);
+			last_pct_reported = 0;
+		}
+		else
+		{
+			fprintf(stdout, "000/??? sec ");
+			fprintf(stdout, "~~(,_,\">");
+			for (int i = 1; i < 10; i++)
+				fprintf(stdout, "      ");
+			fprintf(stdout, "    [oo]");
+			fflush(stdout);
+		}
+		return;
 	}
-	else if (totlen > 0)
-	{
-		t1 = currt - startt; // Elapsed time
-		t2 = (long)(t1 * (float)totlen / rlen); // Total time
 
-		hour = 0;
-		min = 0;
-		if (t2 > 60)
+	if (totlen <= 0)
+		return;
+
+	if (non_interactive)
+	{
+		int pct = (int)(100.0 * rlen / totlen);
+		// Report at every 20% milestone
+		int milestone = (pct / 20) * 20;
+		if (milestone <= last_pct_reported && rlen < totlen)
+			return;
+
+		t1 = currt - startt;
+		t2 = (rlen > 0) ? (long)(t1 * (float)totlen / rlen) : 0;
+
+		int filled = (rlen >= totlen) ? 5 : milestone / 20;
+		char bar[6];
+		for (int b = 0; b < 5; b++)
+			bar[b] = (b < filled) ? '#' : '-';
+		bar[5] = '\0';
+
+		if (t2 > 3600 || t1 > 3600)
+		{
+			h1 = (float)t1 / 3600.0;
+			h2 = (float)t2 / 3600.0;
+			if (rlen >= totlen)
+				fprintf(stdout, "100%% [%s] [%6.2f/%6.2f hrs] done\n", bar, h1, h2);
+			else
+				fprintf(stdout, "%3d%% [%s] [%6.2f/%6.2f hrs]\n", milestone, bar, h1, h2);
+		}
+		else if (t2 > 60 || t1 > 60)
 		{
 			m1 = (float)t1 / 60.0;
 			m2 = (float)t2 / 60.0;
-			min = 1;
-			if (m2 > 60)
-			{
-				h1 = (float)m1 / 60.0;
-				h2 = (float)m2 / 60.0;
-				hour = 1;
-				min = 0;
-			}
+			if (rlen >= totlen)
+				fprintf(stdout, "100%% [%s] [%6.2f/%6.2f min] done\n", bar, m1, m2);
 			else
-				hour = 0;
+				fprintf(stdout, "%3d%% [%s] [%6.2f/%6.2f min]\n", milestone, bar, m1, m2);
 		}
 		else
-			min = 0;
-
-		if (hour)
-			fprintf(stdout, "\r%3.2f/%3.2f %s ", h1, h2, "hrs");
-		else if (min)
-			fprintf(stdout, "\r%3.2f/%3.2f %s ", m1, m2, "min");
-		else
-			fprintf(stdout, "\r%4u/%4u %s ", (int)t1, (int)t2, "sec");
-
-		i = (int)(60 * (1 - (float)(totlen - rlen) / totlen));
-		while (i--)
-			fprintf(stdout, ".");
-		fprintf(stdout, "~~(,_,\">");
-		if (rlen >= totlen)
 		{
-			fprintf(stdout, " yum!\n");
-			totlen = 0;
+			if (rlen >= totlen)
+				fprintf(stdout, "100%% [%s] [%4lu/%4lu sec] done\n", bar, t1, t2);
+			else
+				fprintf(stdout, "%3d%% [%s] [%4lu/%4lu sec]\n", milestone, bar, t1, t2);
 		}
-        else
-        {
-            i = (int)(60 * (float)(totlen - rlen) / totlen);
-            const char* cheese = "";
-            if (i >= 3) cheese = "[oo]";
-            else if (i==2) cheese = "oo]";
-            else if (i==1) cheese = "o]";
-            else if (i==0) cheese = "]";
-            while (i-- > 3)
-            {
-                fprintf(stdout, " ");
-            }
-
-            fprintf(stdout, cheese);
-        }
 		fflush(stdout);
-		prevt = currt;
+		last_pct_reported = (rlen >= totlen) ? 100 : milestone;
+		if (rlen >= totlen)
+			totlen = 0;
+		return;
 	}
+
+	// Interactive terminal: original animation
+	t1 = currt - startt;
+	t2 = (long)(t1 * (float)totlen / rlen);
+
+	int hour = 0, min = 0;
+	if (t2 > 60)
+	{
+		m1 = (float)t1 / 60.0;
+		m2 = (float)t2 / 60.0;
+		min = 1;
+		if (m2 > 60)
+		{
+			h1 = (float)m1 / 60.0;
+			h2 = (float)m2 / 60.0;
+			hour = 1;
+			min = 0;
+		}
+	}
+
+	if (hour)
+		fprintf(stdout, "\r%3.2f/%3.2f %s ", h1, h2, "hrs");
+	else if (min)
+		fprintf(stdout, "\r%3.2f/%3.2f %s ", m1, m2, "min");
+	else
+		fprintf(stdout, "\r%4u/%4u %s ", (int)t1, (int)t2, "sec");
+
+	int i = (int)(60 * (1 - (float)(totlen - rlen) / totlen));
+	while (i--)
+		fprintf(stdout, ".");
+	fprintf(stdout, "~~(,_,\">");
+	if (rlen >= totlen)
+	{
+		fprintf(stdout, " yum!\n");
+		totlen = 0;
+	}
+	else
+	{
+		i = (int)(60 * (float)(totlen - rlen) / totlen);
+		const char* cheese = "";
+		if (i >= 3) cheese = "[oo]";
+		else if (i == 2) cheese = "oo]";
+		else if (i == 1) cheese = "o]";
+		else if (i == 0) cheese = "]";
+		while (i-- > 3)
+			fprintf(stdout, " ");
+		fprintf(stdout, cheese);
+	}
+	fflush(stdout);
 }
 
 
