@@ -1965,45 +1965,44 @@ void HealpixSampling::pushbackOversampledPsiAngles(long int ipsi, int oversampli
 
 }
 
-/* Calculate an angular distance between two sets of Euler angles */
+/* Calculate an angular distance between two sets of Euler angles using geodesic distance on SO(3)
+ * θ = arccos((tr(R1^T R2) - 1) / 2) */
 RFLOAT HealpixSampling::calculateAngularDistance(RFLOAT rot1, RFLOAT tilt1, RFLOAT psi1,
 		RFLOAT rot2, RFLOAT tilt2, RFLOAT psi2)
 {
 
 	if (is_3D)
 	{
-		Matrix1D<RFLOAT>  direction1(3), direction1p(3), direction2(3);
-		Euler_angles2direction(rot1, tilt1, direction1);
-		Euler_angles2direction(rot2, tilt2, direction2);
-
-		// Find the symmetry operation where the Distance based on Euler axes is minimal
-		RFLOAT min_axes_dist = 3600.;
-		RFLOAT rot2p, tilt2p, psi2p;
+		// Convert Euler angles to rotation matrices
 		Matrix2D<RFLOAT> E1, E2;
-		Matrix1D<RFLOAT> v1, v2;
+		Euler_angles2matrix(rot1, tilt1, psi1, E1);
+
+		// Find the symmetry operation where the geodesic distance is minimal
+		RFLOAT min_geodesic_dist = 3600.;
+		RFLOAT rot2p, tilt2p, psi2p;
 		for (int j = 0; j < R_repository.size(); j++)
 		{
-
+			// Apply symmetry operation to second orientation
 			Euler_apply_transf(L_repository[j], R_repository[j], rot2, tilt2, psi2, rot2p, tilt2p, psi2p);
-
-			// Distance based on Euler axes
-			Euler_angles2matrix(rot1, tilt1, psi1, E1);
 			Euler_angles2matrix(rot2p, tilt2p, psi2p, E2);
-			RFLOAT axes_dist = 0;
-			for (int i = 0; i < 3; i++)
-			{
-				E1.getRow(i, v1);
-				E2.getRow(i, v2);
-				axes_dist += ACOSD(CLIP(dotProduct(v1, v2), -1., 1.));
-			}
-			axes_dist /= 3.;
 
-			if (axes_dist < min_axes_dist)
-				min_axes_dist = axes_dist;
+			// trace(E1^T * E2) = sum_i sum_k E1[k,i] * E2[k,i]
+			RFLOAT tr = 0.;
+			for (int i = 0; i < 3; i++)
+				for (int k = 0; k < 3; k++)
+					tr += MAT_ELEM(E1, k, i) * MAT_ELEM(E2, k, i);
+
+			// Geodesic distance: θ = arccos((tr - 1) / 2)
+			// Clip the argument to [-1, 1] to handle numerical errors
+			RFLOAT cos_angle = CLIP((tr - 1.) / 2., -1., 1.);
+			RFLOAT geodesic_dist = ACOSD(cos_angle);
+
+			if (geodesic_dist < min_geodesic_dist)
+				min_geodesic_dist = geodesic_dist;
 
 		}// for all symmetry operations j
 
-		return min_axes_dist;
+		return min_geodesic_dist;
 	}
 	else
 	{
