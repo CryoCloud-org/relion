@@ -233,6 +233,19 @@ void MlOptimiser::parseContinue(int argc, char **argv)
     fn_lowpass_mask = parser.getOption("--lowpass_mask", "User-provided mask for low-pass filtering", "None");
     lowpass = textToFloat(parser.getOption("--lowpass", "User-provided cutoff for region specified above", "0"));
 
+    // Dynamic masking (do_dynamic_mask and its parameters are restored from the optimiser.star in read())
+    if (parser.checkOption("--dynamic_mask", "Switch on regenerating the mask each iteration from the current map?", "OLD"))
+        do_dynamic_mask = true;
+    fnt = parser.getOption("--dynamic_mask_threshold", "Binarization threshold (as a fraction of the map max) for the dynamic refinement mask", "OLD");
+    if (fnt != "OLD")
+        dynamic_mask_threshold = textToFloat(fnt);
+    fnt = parser.getOption("--dynamic_mask_near", "Dynamic mask dilation in pixels = current resolution (in pixels) * this multiplier", "OLD");
+    if (fnt != "OLD")
+        dynamic_mask_near_mult = textToFloat(fnt);
+    fnt = parser.getOption("--dynamic_mask_far", "Dynamic mask soft edge ends at current resolution (in pixels) * this multiplier", "OLD");
+    if (fnt != "OLD")
+        dynamic_mask_far_mult = textToFloat(fnt);
+
     // Check whether tau2-spectrum has changed
     fnt = parser.getOption("--tau", "STAR file with input tau2-spectrum (to be kept constant)", "OLD");
     if (fnt != "OLD")
@@ -644,6 +657,10 @@ void MlOptimiser::parseInitial(int argc, char **argv)
     fn_mask2 = parser.getOption("--solvent_mask2", "User-provided secondary mask (with its own average density)", "None");
     fn_lowpass_mask = parser.getOption("--lowpass_mask", "User-provided mask for low-pass filtering", "None");
     lowpass = textToFloat(parser.getOption("--lowpass", "User-provided cutoff for region specified above", "0"));
+    do_dynamic_mask = parser.checkOption("--dynamic_mask", "Regenerate the mask each iteration from the current map, scaled to the current resolution");
+    dynamic_mask_threshold = textToFloat(parser.getOption("--dynamic_mask_threshold", "Binarization threshold (as a fraction of the map max) for the dynamic refinement mask", "0.2"));
+    dynamic_mask_near_mult = textToFloat(parser.getOption("--dynamic_mask_near", "Dynamic mask dilation in pixels = current resolution (in pixels) * this multiplier", "2.0"));
+    dynamic_mask_far_mult = textToFloat(parser.getOption("--dynamic_mask_far", "Dynamic mask soft edge ends at current resolution (in pixels) * this multiplier", "5.0"));
     fn_tau = parser.getOption("--tau", "STAR file with input tau2-spectrum (to be kept constant)", "None");
     fn_local_symmetry = parser.getOption("--local_symmetry", "Local symmetry description file containing list of masks and their operators", "None");
     do_split_random_halves = parser.checkOption("--split_random_halves", "Refine two random halves of the data completely separately");
@@ -1238,6 +1255,14 @@ void MlOptimiser::read(FileName fn_in, int rank, bool do_prevent_preread)
         fn_body_masks = "None";
     if (!MD.getValue(EMDL_OPTIMISER_DO_SOLVENT_FSC, do_phase_random_fsc))
         do_phase_random_fsc = false;
+    if (!MD.getValue(EMDL_OPTIMISER_DO_DYNAMIC_MASK, do_dynamic_mask))
+        do_dynamic_mask = false;
+    if (!MD.getValue(EMDL_OPTIMISER_DYNAMIC_MASK_THRESHOLD, dynamic_mask_threshold))
+        dynamic_mask_threshold = 0.2;
+    if (!MD.getValue(EMDL_OPTIMISER_DYNAMIC_MASK_NEAR, dynamic_mask_near_mult))
+        dynamic_mask_near_mult = 2.0;
+    if (!MD.getValue(EMDL_OPTIMISER_DYNAMIC_MASK_FAR, dynamic_mask_far_mult))
+        dynamic_mask_far_mult = 5.0;
     if (!MD.getValue(EMDL_OPTIMISER_FAST_SUBSETS, do_fast_subsets))
         do_fast_subsets = false;
     if (!MD.getValue(EMDL_OPTIMISER_DO_EXTERNAL_RECONSTRUCT, do_external_reconstruct))
@@ -1421,6 +1446,10 @@ void MlOptimiser::write(bool do_write_sampling, bool do_write_data, bool do_writ
         MD.setValue(EMDL_OPTIMISER_DO_ZERO_MASK, do_zero_mask);
         MD.setValue(EMDL_OPTIMISER_DO_SOLVENT_FLATTEN, do_solvent);
         MD.setValue(EMDL_OPTIMISER_DO_SOLVENT_FSC, do_phase_random_fsc);
+        MD.setValue(EMDL_OPTIMISER_DO_DYNAMIC_MASK, do_dynamic_mask);
+        MD.setValue(EMDL_OPTIMISER_DYNAMIC_MASK_THRESHOLD, dynamic_mask_threshold);
+        MD.setValue(EMDL_OPTIMISER_DYNAMIC_MASK_NEAR, dynamic_mask_near_mult);
+        MD.setValue(EMDL_OPTIMISER_DYNAMIC_MASK_FAR, dynamic_mask_far_mult);
         MD.setValue(EMDL_OPTIMISER_SOLVENT_MASK_NAME, fn_mask);
         MD.setValue(EMDL_OPTIMISER_SOLVENT_MASK2_NAME, fn_mask2);
         MD.setValue(EMDL_BODY_STAR_FILE, fn_body_masks);
@@ -1517,9 +1546,9 @@ void MlOptimiser::write(bool do_write_sampling, bool do_write_data, bool do_writ
     if (do_write_model)
     {
         if (do_split_random_halves && !do_join_random_halves)
-            mymodel.write(fn_root2 + "_half" + integerToString(random_subset), sampling, do_write_bild);
+            mymodel.write(fn_root2 + "_half" + integerToString(random_subset), sampling, do_write_bild, false, do_dynamic_mask);
         else
-            mymodel.write(fn_root2, sampling, do_write_bild, false);
+            mymodel.write(fn_root2, sampling, do_write_bild, false, do_dynamic_mask);
     }
 
     // And write the mydata to file
@@ -1982,6 +2011,31 @@ void MlOptimiser::initialiseGeneral(int rank)
     // Check for errors in the command-line option
     if (parser.checkForErrors(verb))
         REPORT_ERROR("Errors encountered on the command line (see above), exiting...");
+
+    // Dynamic masking: regenerate the (refinement and resolution) masks every iteration from the current map.
+    if (do_dynamic_mask)
+    {
+        if (mymodel.nr_bodies > 1)
+            REPORT_ERROR("ERROR: --dynamic_mask is not compatible with multi-body refinement (each body already has its own mask).");
+
+        // Dynamic masking implies solvent flattening
+        do_solvent = true;
+
+        // Dynamic masking takes precedence over a user-provided solvent mask
+        if (fn_mask != "None")
+        {
+            if (verb > 0)
+                std::cout << " WARNING: --dynamic_mask was given together with --solvent_mask; ignoring the user-provided mask and regenerating it every iteration." << std::endl;
+            fn_mask = "None";
+        }
+
+        // For gold-standard refinement, exercise the solvent-corrected FSC with the dynamic resolution mask
+        if (do_split_random_halves)
+            do_phase_random_fsc = true;
+
+        if (dynamic_mask_far_mult <= dynamic_mask_near_mult)
+            REPORT_ERROR("ERROR: --dynamic_mask_far must be larger than --dynamic_mask_near.");
+    }
 
 #ifdef RELION_SINGLE_PRECISION
         if (verb > 0)
@@ -5470,6 +5524,21 @@ void MlOptimiser::solventFlatten()
     if (mymodel.nr_bodies > 1)
         return;
 
+    // Dynamic masking: regenerate a refinement mask per class from the current map (scaled to the current resolution)
+    if (do_dynamic_mask)
+    {
+        mymodel.dynamic_masks.resize(mymodel.nr_classes);
+        for (int iclass = 0; iclass < mymodel.nr_classes; iclass++)
+        {
+            getDynamicMask(mymodel.Iref[iclass], dynamic_mask_threshold, mymodel.dynamic_masks[iclass]);
+            mymodel.Iref[iclass] *= mymodel.dynamic_masks[iclass];
+        }
+#ifdef DEBUG
+        std::cerr << "Leaving MlOptimiser::solventFlatten (dynamic mask)" << std::endl;
+#endif
+        return;
+    }
+
     // First read solvent mask from disc, or pre-calculate it
     Image<RFLOAT> Isolvent, Isolvent2, Ilowpass;
     Isolvent().resize(mymodel.Iref[0]);
@@ -5568,6 +5637,24 @@ void MlOptimiser::solventFlatten()
     std::cerr << "Leaving MlOptimiser::solventFlatten" << std::endl;
 #endif
 
+}
+
+void MlOptimiser::getDynamicMask(MultidimArray<RFLOAT> &map, RFLOAT threshold_frac, MultidimArray<RFLOAT> &mask_out)
+{
+    // Resolution in Angstrom from the (previous iteration's) current_resolution (1/Angstrom).
+    // Fall back to a very loose mask if the resolution is not yet available.
+    RFLOAT res_A = (mymodel.current_resolution > 0.) ? (1.0 / mymodel.current_resolution)
+                                                     : (mymodel.pixel_size * mymodel.ori_size);
+    // Convert to pixels
+    RFLOAT res_px = res_A / mymodel.pixel_size;
+
+    // Binarize at a fraction of the map maximum, dilate by (res_px * near), soft cosine edge of width res_px * (far - near)
+    RFLOAT thr = map.computeMax() * threshold_frac;
+    RFLOAT extend = res_px * dynamic_mask_near_mult;
+    RFLOAT edge = res_px * (dynamic_mask_far_mult - dynamic_mask_near_mult);
+
+    // autoMask: binarize >= thr, grow by extend voxels, then add a raised-cosine edge of width edge
+    autoMask(map, mask_out, thr, extend, edge, false, XMIPP_MAX(1, nr_threads));
 }
 
 void MlOptimiser::updateCurrentResolution()

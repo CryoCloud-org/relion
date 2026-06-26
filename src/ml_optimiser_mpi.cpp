@@ -3319,7 +3319,12 @@ void MlOptimiserMpi::reconstructUnregularisedMapAndCalculateSolventCorrectedFSC(
 			getFSC(Iunreg1(), Iunreg2(), fsc_unmasked);
 
 			Image<RFLOAT> Imask;
-			if (mymodel.nr_bodies > 1)
+			if (do_dynamic_mask)
+			{
+				// Regenerate the resolution mask from the current half-map (fixed threshold of 0.5)
+				getDynamicMask(Iunreg1(), 0.5, Imask());
+			}
+			else if (mymodel.nr_bodies > 1)
 			{
 				Imask() = mymodel.masks_bodies[ibody];
 			}
@@ -4025,7 +4030,7 @@ void MlOptimiserMpi::iterate()
 
 			// Sjors 27-oct-2015
 			// Calculate gold-standard FSC curve
-			if (do_phase_random_fsc && (fn_mask != "None" || mymodel.nr_bodies > 1) )
+			if (do_phase_random_fsc && (fn_mask != "None" || mymodel.nr_bodies > 1 || do_dynamic_mask) )
 				reconstructUnregularisedMapAndCalculateSolventCorrectedFSC();
 			else
 				compareTwoHalves();

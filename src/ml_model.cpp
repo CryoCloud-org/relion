@@ -466,7 +466,7 @@ void MlModel::read(FileName fn_in, int nr_optics_groups_from_mydata, bool _do_gr
 
 }
 
-void MlModel::write(FileName fn_out, HealpixSampling &sampling, bool do_write_bild, bool only_write_images)
+void MlModel::write(FileName fn_out, HealpixSampling &sampling, bool do_write_bild, bool only_write_images, bool do_write_dynamic_masks)
 {
 
 	MetaDataTable MDclass, MDgroup, MDopticsgroup, MDlog, MDsigma, MDbodies;
@@ -549,6 +549,16 @@ void MlModel::write(FileName fn_out, HealpixSampling &sampling, bool do_write_bi
 				fn_tmp.compose(fn_out+"_class", iclass+1, "mrc", 3);
 
 			img.write(fn_tmp);
+
+			// Also write out the dynamic refinement mask of this iteration, so the user can inspect its tightness/softness
+			if (do_write_dynamic_masks && iclass < (int)dynamic_masks.size() && NZYXSIZE(dynamic_masks[iclass]) > 0)
+			{
+				Image<RFLOAT> imsk;
+				imsk() = dynamic_masks[iclass];
+				imsk.setSamplingRateInHeader(pixel_size);
+				fn_tmp2.compose(fn_out+"_class", iclass+1, "", 3);
+				imsk.write(fn_tmp2 + "_dynamic_mask.mrc");
+			}
 		}
 
 		if (do_grad)

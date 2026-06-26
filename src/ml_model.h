@@ -108,6 +108,9 @@ public:
 	// Vector with masks for all bodies in multi-body refinement
 	std::vector<MultidimArray<RFLOAT> > masks_bodies;
 
+	// Vector with the per-class dynamic refinement masks of the current iteration (only filled when --dynamic_mask is used)
+	std::vector<MultidimArray<RFLOAT> > dynamic_masks;
+
 	// Vector with center-of-mass coordinates for all bodies in multi-body refinement
 	std::vector<Matrix1D<RFLOAT> > com_bodies;
 
@@ -332,6 +335,7 @@ public:
 			Igrad1 = MD.Igrad1;
 			Igrad2 = MD.Igrad2;
 			masks_bodies = MD.masks_bodies;
+			dynamic_masks = MD.dynamic_masks;
 			com_bodies = MD.com_bodies;
 			orient_bodies = MD.orient_bodies;
 			sigma_tilt_bodies = MD.sigma_tilt_bodies;
@@ -376,6 +380,7 @@ public:
 		Igrad1.clear();
 		Igrad2.clear();
 		masks_bodies.clear();
+		dynamic_masks.clear();
 		com_bodies.clear();
 		orient_bodies.clear();
 		sigma_tilt_bodies.clear();
@@ -423,7 +428,7 @@ public:
 
 	// Write a model to disc
 	void write(FileName fn_out, HealpixSampling &sampling,
-			bool do_write_bild = true, bool do_only_write_images = false);
+			bool do_write_bild = true, bool do_only_write_images = false, bool do_write_dynamic_masks = false);
 
 	//Read a tau-spectrum from a STAR file
 	void readTauSpectrum(FileName fn_tau, int verb);

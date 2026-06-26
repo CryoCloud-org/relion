@@ -337,6 +337,18 @@ public:
 	// Correct gold-standard FSC for solvent mask?
 	bool do_phase_random_fsc;
 
+	// Regenerate the mask every iteration from the current map, scaled to the current resolution
+	bool do_dynamic_mask;
+
+	// Binarization threshold (fraction of map max) for the dynamic refinement mask
+	RFLOAT dynamic_mask_threshold;
+
+	// Dilation = current resolution (in pixels) * dynamic_mask_near_mult
+	RFLOAT dynamic_mask_near_mult;
+
+	// Soft edge ends at current resolution (in pixels) * dynamic_mask_far_mult
+	RFLOAT dynamic_mask_far_mult;
+
 	// Filename for a user-provided second solvent mask
 	// This solvent mask will have its own average density and may be useful for example to fill the interior of an icosahedral virus
 	FileName fn_mask2;
@@ -812,6 +824,11 @@ public:
             do_parallel_disc_io(0),
             sum_changes_optimal_orientations(0),
             do_solvent(0),
+            do_phase_random_fsc(0),
+            do_dynamic_mask(false),
+            dynamic_mask_threshold(0.2),
+            dynamic_mask_near_mult(2.0),
+            dynamic_mask_far_mult(5.0),
             strict_highres_exp(0),
             sum_changes_optimal_classes(0),
             acc_trans(0),
@@ -1072,6 +1089,12 @@ public:
 	/* Apply a solvent flattening to a map
 	 */
 	void solventFlatten();
+
+	/* Build a dynamic mask from the current map, scaled to the current resolution:
+	 * binarize at (map max * threshold_frac), dilate by (resolution-in-pixels * near_mult),
+	 * then add a raised-cosine soft edge out to (resolution-in-pixels * far_mult).
+	 */
+	void getDynamicMask(MultidimArray<RFLOAT> &map, RFLOAT threshold_frac, MultidimArray<RFLOAT> &mask_out);
 
 	/* Center classes based on their center-of-mass
 	 * and also update the origin offsets in the _data.star file correspondingly

@@ -401,6 +401,10 @@ enum EMDLabel
 	EMDL_OPTIMISER_DO_CENTER_CLASSES,
 	EMDL_OPTIMISER_DO_SOLVENT_FLATTEN,
 	EMDL_OPTIMISER_DO_SOLVENT_FSC,
+	EMDL_OPTIMISER_DO_DYNAMIC_MASK,
+	EMDL_OPTIMISER_DYNAMIC_MASK_THRESHOLD,
+	EMDL_OPTIMISER_DYNAMIC_MASK_NEAR,
+	EMDL_OPTIMISER_DYNAMIC_MASK_FAR,
 	EMDL_OPTIMISER_DO_SKIP_ALIGN,
 	EMDL_OPTIMISER_DO_SKIP_ROTATE,
 	EMDL_OPTIMISER_DO_SPLIT_RANDOM_HALVES,
@@ -1129,6 +1133,10 @@ private:
 		EMDL::addLabel(EMDL_OPTIMISER_DO_CENTER_CLASSES, EMDL_BOOL, "rlnDoCenterClasses", "Flag to indicate that the class averages or reconstructions should be centered based on their center-of-mass during every iteration.");
 		EMDL::addLabel(EMDL_OPTIMISER_DO_SOLVENT_FLATTEN, EMDL_BOOL, "rlnDoSolventFlattening", "Flag to indicate that the references should be masked to set their solvent areas to a constant density");
 		EMDL::addLabel(EMDL_OPTIMISER_DO_SOLVENT_FSC, EMDL_BOOL, "rlnDoSolventFscCorrection", "Flag to indicate that the FSCs should be solvent-corrected during refinement");
+		EMDL::addLabel(EMDL_OPTIMISER_DO_DYNAMIC_MASK, EMDL_BOOL, "rlnDoDynamicMask", "Flag to indicate that the refinement mask should be regenerated every iteration from the current map, scaled to the current resolution");
+		EMDL::addLabel(EMDL_OPTIMISER_DYNAMIC_MASK_THRESHOLD, EMDL_DOUBLE, "rlnDynamicMaskThreshold", "Binarization threshold (as a fraction of the map maximum) for the dynamic refinement mask");
+		EMDL::addLabel(EMDL_OPTIMISER_DYNAMIC_MASK_NEAR, EMDL_DOUBLE, "rlnDynamicMaskNearMultiplier", "Dynamic mask dilation in pixels equals the current resolution (in pixels) times this multiplier");
+		EMDL::addLabel(EMDL_OPTIMISER_DYNAMIC_MASK_FAR, EMDL_DOUBLE, "rlnDynamicMaskFarMultiplier", "Dynamic mask soft edge ends at the current resolution (in pixels) times this multiplier");
 		EMDL::addLabel(EMDL_OPTIMISER_DO_SKIP_ALIGN, EMDL_BOOL, "rlnDoSkipAlign", "Flag to indicate that orientational (i.e. rotational and translational) searches will be omitted from the refinement, only marginalisation over classes will take place");
 		EMDL::addLabel(EMDL_OPTIMISER_DO_SKIP_ROTATE, EMDL_BOOL, "rlnDoSkipRotate", "Flag to indicate that rotational searches will be omitted from the refinement, only marginalisation over classes and translations will take place");
 		EMDL::addLabel(EMDL_OPTIMISER_DO_SPLIT_RANDOM_HALVES, EMDL_BOOL, "rlnDoSplitRandomHalves", "Flag to indicate that the data should be split into two completely separate, random halves");
